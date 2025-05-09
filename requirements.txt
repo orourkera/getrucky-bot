@@ -1,0 +1,7 @@
+# requirements.txt
+
+tweepy==4.14.0
+requests==2.31.0
+textblob==0.17.1
+apscheduler==3.10.1
+psycopg2==2.9.5 
