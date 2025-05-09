@@ -19,7 +19,7 @@ APP_API_URL = 'https://rucking-app.herokuapp.com/api/sessions'
 
 # xAI API credentials
 XAI_API_KEY = os.getenv('XAI_API_KEY')
-XAI_API_URL = 'https://x.ai/api'
+XAI_API_URL = 'https://api.x.ai/v1/chat/completions'  # Updated to a more specific endpoint based on typical xAI API structure
 
 def test_x_api():
     """Test connectivity to the X API."""
@@ -72,13 +72,15 @@ def test_xai_api():
 
     try:
         headers = {'Authorization': f'Bearer {XAI_API_KEY}', 'Content-Type': 'application/json'}
-        payload = {'prompt': 'Test connectivity', 'max_tokens': 5}
+        payload = {'model': 'grok-2-latest', 'messages': [{'role': 'user', 'content': 'Test connectivity'}], 'stream': False, 'temperature': 0.7}
         response = requests.post(XAI_API_URL, json=payload, headers=headers, timeout=10)
         if response.status_code == 200:
             logger.info("Successfully connected to xAI API.")
+            logger.info(f"Response: {response.json()}")
             return True
         else:
             logger.error(f"Failed to connect to xAI API. Status code: {response.status_code}")
+            logger.error(f"Response text: {response.text}")
             return False
     except requests.exceptions.RequestException as e:
         logger.error(f"Failed to connect to xAI API: {str(e)}")
