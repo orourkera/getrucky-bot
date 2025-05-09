@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 # X API credentials from environment variables
 X_API_KEY = os.getenv('X_API_KEY')
-X_API_SECRET = os.getenv('X_API_SECRET_KEY')
+X_API_SECRET = os.getenv('X_API_SECRET')
 X_ACCESS_TOKEN = os.getenv('X_ACCESS_TOKEN')
 X_ACCESS_TOKEN_SECRET = os.getenv('X_ACCESS_TOKEN_SECRET')
 
@@ -23,6 +23,10 @@ XAI_API_URL = 'https://x.ai/api'
 
 def test_x_api():
     """Test connectivity to the X API."""
+    logger.info(f"X_API_KEY set: {bool(X_API_KEY)}")
+    logger.info(f"X_API_SECRET set: {bool(X_API_SECRET)}")
+    logger.info(f"X_ACCESS_TOKEN set: {bool(X_ACCESS_TOKEN)}")
+    logger.info(f"X_ACCESS_TOKEN_SECRET set: {bool(X_ACCESS_TOKEN_SECRET)}")
     if not all([X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRET]):
         logger.error("X API credentials are not fully set in environment variables.")
         return False
@@ -41,6 +45,7 @@ def test_x_api():
 
 def test_app_api():
     """Test connectivity to the rucking app API."""
+    logger.info(f"APP_API_TOKEN set: {bool(APP_API_TOKEN)}")
     if not APP_API_TOKEN:
         logger.error("Rucking app API token is not set in environment variables.")
         return False
@@ -60,6 +65,7 @@ def test_app_api():
 
 def test_xai_api():
     """Test connectivity to the xAI API."""
+    logger.info(f"XAI_API_KEY set: {bool(XAI_API_KEY)}")
     if not XAI_API_KEY:
         logger.error("xAI API key is not set in environment variables.")
         return False
