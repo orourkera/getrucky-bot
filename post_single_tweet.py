@@ -16,7 +16,12 @@ def main():
     logger.info("Starting single tweet post test...")
     
     # Select content type based on weights
-    content_type = select_content_type()
+    content_type_data = select_content_type()
+    # Handle if select_content_type returns a tuple or single value
+    if isinstance(content_type_data, tuple):
+        content_type = content_type_data[0]  # Take the first element if it's a tuple
+    else:
+        content_type = content_type_data
     logger.info(f"Selected content type: {content_type}")
     
     # Generate post content
