@@ -35,11 +35,11 @@ def test_x_api():
         auth = tweepy.OAuthHandler(X_API_KEY, X_API_SECRET)
         auth.set_access_token(X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRET)
         api = tweepy.API(auth, wait_on_rate_limit=True)
-        # Test by fetching user info for @getrucky
-        user = api.get_user(screen_name='getrucky')
-        logger.info(f"Successfully connected to X API. Retrieved user: {user.screen_name}")
+        # Test by verifying credentials instead of fetching user info due to access restrictions
+        creds = api.verify_credentials()
+        logger.info(f"Successfully connected to X API. Verified credentials for user: {creds.screen_name}")
         return True
-    except tweepy.TweepError as e:
+    except tweepy.errors.TweepyException as e:
         logger.error(f"Failed to connect to X API: {str(e)}")
         return False
 
