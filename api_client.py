@@ -9,28 +9,37 @@ logger = logging.getLogger(__name__)
 
 # X API Client
 def initialize_x_client():
-    """Initialize and return X API client with OAuth 1.0a authentication."""
+    """Initialize and return X API client with OAuth 1.0a authentication using v2 API."""
     try:
-        auth = tweepy.OAuthHandler(X_API_KEY, X_API_SECRET)
-        auth.set_access_token(X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRET)
-        api = tweepy.API(auth, wait_on_rate_limit=True)
-        # Verify credentials
-        api.verify_credentials()
-        logger.info("X API client initialized successfully")
-        return api
+        client = tweepy.Client(
+            consumer_key=X_API_KEY,
+            consumer_secret=X_API_SECRET,
+            access_token=X_ACCESS_TOKEN,
+            access_token_secret=X_ACCESS_TOKEN_SECRET
+        )
+        # Verify credentials by fetching user info
+        client.get_me()
+        logger.info("X API client initialized successfully with v2 API")
+        return client
     except Exception as e:
         logger.error(f"Failed to initialize X API client: {e}")
         raise
 
-def post_tweet(api, text, media=None):
-    """Post a tweet with optional media."""
+def post_tweet(client, text, media=None):
+    """Post a tweet with optional media using v2 API."""
     try:
         if media:
-            result = api.update_status_with_media(status=text, filename=media)
+            # Media upload still uses v1.1 API, need separate handling
+            auth = tweepy.OAuthHandler(X_API_KEY, X_API_SECRET)
+            auth.set_access_token(X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRET)
+            api = tweepy.API(auth, wait_on_rate_limit=True)
+            media_upload = api.media_upload(filename=media)
+            media_id = media_upload.media_id_string
+            result = client.create_tweet(text=text, media_ids=[media_id])
         else:
-            result = api.update_status(status=text)
+            result = client.create_tweet(text=text)
         logger.info(f"Posted tweet: {text[:50]}...")
-        return result.id
+        return result.data['id']
     except Exception as e:
         logger.error(f"Error posting tweet: {e}")
         raise
