@@ -5,7 +5,7 @@ import logging
 import sys
 sys.path.append('.')
 
-from api_client import get_xai_headers, post_tweet
+from api_client import initialize_xai_client, post_tweet
 from content_generator import select_content_type, generate_post
 
 # Configure logging
@@ -18,7 +18,7 @@ def main():
     
     try:
         # Get xAI headers for content generation
-        xai_headers = get_xai_headers()
+        xai_headers = initialize_xai_client()
         if not xai_headers:
             logger.error("Failed to get xAI API headers")
             return
