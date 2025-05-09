@@ -5,7 +5,7 @@ import logging
 import sys
 sys.path.append('.')
 
-from api_client import initialize_xai_client, post_tweet
+from api_client import initialize_xai_client, initialize_x_client, post_tweet
 from content_generator import select_content_type, generate_post
 
 # Configure logging
@@ -23,6 +23,12 @@ def main():
             logger.error("Failed to get xAI API headers")
             return
         
+        # Initialize X API client
+        x_client = initialize_x_client()
+        if not x_client:
+            logger.error("Failed to initialize X API client")
+            return
+        
         # Select content type
         content_type, theme = select_content_type()
         logger.info(f"Selected content type: {content_type}")
@@ -36,7 +42,7 @@ def main():
         logger.info(f"Generated content: {content}")
         
         # Post the tweet
-        tweet_id = post_tweet(content)
+        tweet_id = post_tweet(x_client, content)
         if tweet_id:
             logger.info(f"Successfully posted tweet with ID: {tweet_id}")
         else:
