@@ -11,52 +11,36 @@ logger = logging.getLogger(__name__)
 def initialize_x_client():
     """Initialize and return X API client with OAuth 1.0a authentication using v2 API."""
     try:
-        # Try both OAuth 1.0a and Bearer token in parallel
-        oauth_client = None
-        bearer_client = None
-        oauth_error = None
-        bearer_error = None
-
-        # Try OAuth 1.0a
-        try:
-            oauth_client = tweepy.Client(
-                consumer_key=X_API_KEY,
-                consumer_secret=X_API_SECRET,
-                access_token=X_ACCESS_TOKEN,
-                access_token_secret=X_ACCESS_TOKEN_SECRET
-            )
-            # Verify credentials by fetching user info
-            oauth_client.get_me()
-            logger.info("X API client initialized successfully with OAuth 1.0a")
-            return oauth_client
-        except Exception as e:
-            oauth_error = e
-            logger.warning(f"OAuth 1.0a initialization failed: {e}")
-
-        # Try Bearer token
-        bearer_token = get_config('X_BEARER_TOKEN')
-        if bearer_token:
-            try:
-                bearer_client = tweepy.Client(bearer_token=bearer_token)
-                # Verify credentials by fetching user info
-                bearer_client.get_me()
-                logger.info("X API client initialized successfully with Bearer token")
-                return bearer_client
-            except Exception as e:
-                bearer_error = e
-                logger.warning(f"Bearer token initialization failed: {e}")
-
-        # If both methods failed, raise a detailed error
-        error_msg = "Failed to initialize X API client:\n"
-        if oauth_error:
-            error_msg += f"OAuth 1.0a error: {oauth_error}\n"
-        if bearer_error:
-            error_msg += f"Bearer token error: {bearer_error}"
-        raise Exception(error_msg)
-            
+        # Initialize with OAuth 1.0a for full access
+        client = tweepy.Client(
+            consumer_key=X_API_KEY,
+            consumer_secret=X_API_SECRET,
+            access_token=X_ACCESS_TOKEN,
+            access_token_secret=X_ACCESS_TOKEN_SECRET
+        )
+        # Verify credentials by fetching user info
+        client.get_me()
+        logger.info("X API client initialized successfully with OAuth 1.0a")
+        return client
     except Exception as e:
-        logger.error(f"Failed to initialize X API client: {e}")
+        logger.error(f"Failed to initialize X API client with OAuth 1.0a: {e}")
         raise
+
+def initialize_readonly_client():
+    """Initialize and return a read-only X API client using Bearer token."""
+    try:
+        bearer_token = get_config('X_BEARER_TOKEN')
+        if not bearer_token:
+            raise Exception("No Bearer token available")
+            
+        client = tweepy.Client(bearer_token=bearer_token)
+        # Verify credentials by fetching user info
+        client.get_me()
+        logger.info("Read-only X API client initialized successfully with Bearer token")
+        return client
+    except Exception as e:
+        logger.error(f"Failed to initialize read-only X API client: {e}")
+        return None
 
 def post_tweet(client, text, media=None):
     """Post a tweet with optional media using v2 API."""
@@ -77,56 +61,83 @@ def post_tweet(client, text, media=None):
         logger.error(f"Error posting tweet: {e}")
         raise
 
-def reply_to_tweet(api, tweet_id, text, media=None):
+def reply_to_tweet(client, tweet_id, text, media=None):
     """Reply to a specific tweet with optional media."""
     try:
         if media:
-            result = api.update_status_with_media(status=text, filename=media, in_reply_to_status_id=tweet_id)
+            # Media upload still uses v1.1 API, need separate handling
+            auth = tweepy.OAuthHandler(X_API_KEY, X_API_SECRET)
+            auth.set_access_token(X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRET)
+            api = tweepy.API(auth, wait_on_rate_limit=True)
+            media_upload = api.media_upload(filename=media)
+            media_id = media_upload.media_id_string
+            result = client.create_tweet(text=text, media_ids=[media_id], in_reply_to_tweet_id=tweet_id)
         else:
-            result = api.update_status(status=text, in_reply_to_status_id=tweet_id)
+            result = client.create_tweet(text=text, in_reply_to_tweet_id=tweet_id)
         logger.info(f"Replied to tweet {tweet_id}: {text[:50]}...")
-        return result.id
+        return result.data['id']
     except Exception as e:
         logger.error(f"Error replying to tweet {tweet_id}: {e}")
         raise
 
-def like_tweet(api, tweet_id):
+def like_tweet(client, tweet_id):
     """Like a specific tweet."""
     try:
-        api.create_favorite(tweet_id)
+        client.like(tweet_id)
         logger.info(f"Liked tweet {tweet_id}")
         return True
     except Exception as e:
         logger.error(f"Error liking tweet {tweet_id}: {e}")
         return False
 
-def retweet(api, tweet_id):
+def retweet(client, tweet_id):
     """Retweet a specific tweet."""
     try:
-        api.retweet(tweet_id)
+        client.retweet(tweet_id)
         logger.info(f"Retweeted tweet {tweet_id}")
         return True
     except Exception as e:
         logger.error(f"Error retweeting tweet {tweet_id}: {e}")
         return False
 
-def search_tweets(api, query, min_likes=10):
+def search_tweets(client, query, min_likes=10):
     """Search recent tweets for a query, filter by minimum likes."""
     try:
-        tweets = api.search_tweets(q=query, lang="en", result_type="recent", count=100)
-        filtered_tweets = [tweet for tweet in tweets if tweet.favorite_count >= min_likes]
+        # Use read-only client for search if available
+        readonly_client = initialize_readonly_client()
+        search_client = readonly_client if readonly_client else client
+        
+        tweets = search_client.search_recent_tweets(query=query, max_results=100)
+        if not tweets.data:
+            return []
+            
+        filtered_tweets = []
+        for tweet in tweets.data:
+            # Get like count using read-only client
+            tweet_data = search_client.get_tweet(tweet.id, tweet_fields=['public_metrics'])
+            if tweet_data.data and tweet_data.data.public_metrics['like_count'] >= min_likes:
+                filtered_tweets.append(tweet)
+                
         logger.info(f"Searched for '{query}': found {len(filtered_tweets)} tweets with >= {min_likes} likes")
         return filtered_tweets
     except Exception as e:
         logger.error(f"Error searching tweets for '{query}': {e}")
         return []
 
-def get_user_followers(api, username):
+def get_user_followers(client, username):
     """Fetch follower count for a user."""
     try:
-        user = api.get_user(screen_name=username)
-        logger.info(f"Fetched follower count for {username}: {user.followers_count}")
-        return user.followers_count
+        # Use read-only client if available
+        readonly_client = initialize_readonly_client()
+        search_client = readonly_client if readonly_client else client
+        
+        user = search_client.get_user(username=username, user_fields=['public_metrics'])
+        if not user.data:
+            return 0
+            
+        follower_count = user.data.public_metrics['followers_count']
+        logger.info(f"Fetched follower count for {username}: {follower_count}")
+        return follower_count
     except Exception as e:
         logger.error(f"Error fetching followers for {username}: {e}")
         return 0
