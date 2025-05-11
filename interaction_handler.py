@@ -9,6 +9,7 @@ from textblob import TextBlob
 import api_client
 import content_generator
 from config import MAX_REPLIES, CONTENT_WEIGHTS
+import tweepy
 
 logger = logging.getLogger(__name__)
 
@@ -25,17 +26,6 @@ def monitor_mentions(x_client, xai_headers):
     logger.info("Starting to monitor mentions for @getrucky")
     while True:
         try:
-            # Add diagnostic logging for the client
-            logger.info(f"Mention monitoring using client: {type(x_client)}")
-            try:
-                me_check = x_client.get_me()
-                if me_check.data:
-                    logger.info(f"Mention client authenticated for @{me_check.data.username}")
-                else:
-                    logger.warning("Mention client get_me() returned no data.")
-            except Exception as e_check:
-                logger.error(f"Mention client get_me() check failed: {e_check}")
-            
             # Reset reply count every hour
             if time.time() - start_time > 3600:
                 replies_count = 0
@@ -47,10 +37,28 @@ def monitor_mentions(x_client, xai_headers):
                 time.sleep(3600 - (time.time() - start_time))
                 continue
             
-            # Search for mentions
-            me = x_client.get_me()
-            mentions_response = x_client.get_users_mentions(me.data.id, since_id=last_id, max_results=20)
-            mentions = mentions_response.data if mentions_response and mentions_response.data else []
+            # Search for mentions with specific error handling
+            try:
+                me = x_client.get_me() # Necessary to get the ID for mentions endpoint
+                if not me.data:
+                    logger.error("Could not get user ID for mention monitoring.")
+                    time.sleep(300)
+                    continue
+
+                mentions_response = x_client.get_users_mentions(me.data.id, since_id=last_id, max_results=20)
+                mentions = mentions_response.data if mentions_response and mentions_response.data else []
+            
+            except tweepy.TooManyRequests:
+                logger.warning("Rate limit hit on get_users_mentions. Sleeping for 15 minutes.")
+                time.sleep(900) # Sleep for 15 minutes
+                continue
+            except tweepy.TweepyException as e_tweepy:
+                logger.error(f"Error fetching mentions (TweepyException): {e_tweepy}")
+                if e_tweepy.response is not None:
+                    logger.error(f"API Response: {e_tweepy.response.status_code} - {e_tweepy.response.text}")
+                time.sleep(300)
+                continue
+
             if not mentions:
                 logger.info("No new mentions found. Sleeping for 5 minutes.")
                 time.sleep(300)  # Sleep for 5 minutes if no mentions
