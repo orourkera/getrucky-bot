@@ -17,7 +17,7 @@ INTERACTION_LOG_DB = '/tmp/interaction_log.db'
 
 
 def monitor_mentions(x_client, xai_headers):
-    """Monitor mentions of @getrucky and reply based on sentiment."""
+    """Monitor mentions of @getrucky and reply based on enhanced sentiment analysis."""
     last_id = None
     replies_count = 0
     start_time = time.time()
@@ -37,7 +37,9 @@ def monitor_mentions(x_client, xai_headers):
                 continue
             
             # Search for mentions
-            mentions = x_client.get_mentions_timeline(since_id=last_id, count=20)
+            me = x_client.get_me()
+            mentions_response = x_client.get_users_mentions(me.data.id, since_id=last_id, max_results=20)
+            mentions = mentions_response.data if mentions_response and mentions_response.data else []
             if not mentions:
                 logger.info("No new mentions found. Sleeping for 5 minutes.")
                 time.sleep(300)  # Sleep for 5 minutes if no mentions
@@ -50,10 +52,19 @@ def monitor_mentions(x_client, xai_headers):
                 
                 tweet_text = mention.text
                 username = mention.user.screen_name
-                sentiment = analyze_sentiment(tweet_text)
-                content_type = select_reply_content_type()
+                sentiment, sentiment_context = analyze_sentiment(tweet_text)
+                content_type = select_reply_content_type(sentiment, sentiment_context)
+                mention_timestamp = mention.created_at.isoformat() if hasattr(mention, 'created_at') else datetime.utcnow().isoformat()
                 
-                reply_text = content_generator.generate_reply(xai_headers, tweet_text, sentiment, content_type)
+                # Generate context-aware reply
+                reply_text = content_generator.generate_reply(
+                    xai_headers,
+                    tweet_text,
+                    sentiment,
+                    content_type,
+                    sentiment_context
+                )
+                
                 if len(reply_text) > 280:
                     reply_text = reply_text[:277] + '...'
                 
@@ -64,7 +75,14 @@ def monitor_mentions(x_client, xai_headers):
                 
                 if api_client.reply_to_tweet(x_client, tweet_id, reply_text):
                     replies_count += 1
-                    log_interaction(tweet_id, reply_text, sentiment, content_type)
+                    log_interaction(
+                        tweet_id,
+                        reply_text,
+                        sentiment,
+                        content_type,
+                        mention_timestamp,
+                        sentiment_context
+                    )
                     logger.info(f"Replied to mention by @{username} with sentiment {sentiment}: {reply_text[:50]}...")
                 
                 # Small delay to avoid rate limiting
@@ -77,42 +95,130 @@ def monitor_mentions(x_client, xai_headers):
             time.sleep(600)  # Wait longer on error (10 minutes)
 
 def analyze_sentiment(text):
-    """Analyze the sentiment of the tweet text using TextBlob."""
+    """Analyze the sentiment of the tweet text using TextBlob with enhanced context."""
     try:
         blob = TextBlob(text)
         polarity = blob.sentiment.polarity
-        if polarity > 0.1:
-            return 'positive'
+        subjectivity = blob.sentiment.subjectivity
+        
+        # Enhanced sentiment analysis with context
+        sentiment_context = {
+            'polarity': polarity,
+            'subjectivity': subjectivity,
+            'is_question': '?' in text,
+            'has_hashtags': '#' in text,
+            'has_mentions': '@' in text,
+            'length': len(text),
+            'contains_ruck': 'ruck' in text.lower(),
+            'contains_emojis': any(c in text for c in ['😀', '😊', '😍', '😢', '😡', '😤'])
+        }
+        
+        # Determine sentiment with more granularity
+        if polarity > 0.3:
+            sentiment = 'very_positive'
+        elif polarity > 0.1:
+            sentiment = 'positive'
+        elif polarity < -0.3:
+            sentiment = 'very_negative'
         elif polarity < -0.1:
-            return 'negative'
+            sentiment = 'negative'
         else:
-            return 'neutral'
+            sentiment = 'neutral'
+        
+        # Adjust sentiment based on context
+        if sentiment_context['is_question']:
+            sentiment = f'question_{sentiment}'
+        if sentiment_context['contains_ruck']:
+            sentiment = f'ruck_{sentiment}'
+        
+        return sentiment, sentiment_context
     except Exception as e:
         logger.error(f"Error analyzing sentiment: {e}")
-        return 'neutral'
+        return 'neutral', {}
 
-def select_reply_content_type():
-    """Select a content type for the reply based on weighted probability."""
+def select_reply_content_type(sentiment, sentiment_context):
+    """Select a content type for the reply based on sentiment and context."""
+    # Adjust weights based on sentiment and context
+    adjusted_weights = CONTENT_WEIGHTS.copy()
+    
+    if sentiment.startswith('very_positive'):
+        adjusted_weights['challenge'] *= 1.5  # Encourage challenges for positive users
+        adjusted_weights['shoutout'] *= 1.3
+    elif sentiment.startswith('very_negative'):
+        adjusted_weights['meme'] *= 1.5  # Lighten mood with memes
+        adjusted_weights['pun'] *= 1.3
+    elif sentiment.startswith('question'):
+        adjusted_weights['theme'] *= 1.5  # Provide informative content
+        adjusted_weights['challenge'] *= 1.2
+    elif sentiment.startswith('ruck'):
+        adjusted_weights['shoutout'] *= 1.4  # Acknowledge rucking mentions
+        adjusted_weights['challenge'] *= 1.2
+    
+    # Select content type based on adjusted weights
     rand = random.random()
     cumulative_weight = 0
-    for content_type, weight in CONTENT_WEIGHTS.items():
-        cumulative_weight += weight
+    total_weight = sum(adjusted_weights.values())
+    
+    for content_type, weight in adjusted_weights.items():
+        cumulative_weight += weight / total_weight
         if rand <= cumulative_weight:
             return content_type
+    
     return 'pun'  # Default fallback
 
-def log_interaction(tweet_id, reply_text, sentiment, content_type):
-    """Log interaction details to interaction_log.db."""
+def log_interaction(tweet_id, reply_text, sentiment, content_type, mention_timestamp=None, sentiment_context=None):
+    """Log interaction details to interaction_log.db with enhanced context."""
     try:
         conn = sqlite3.connect(INTERACTION_LOG_DB)
         cursor = conn.cursor()
+        
+        # Create table if it doesn't exist with new columns
         cursor.execute("""
-            INSERT OR REPLACE INTO logs (tweet_id, reply_text, sentiment, content_type, timestamp)
-            VALUES (?, ?, ?, ?, ?)
-        """, (str(tweet_id), reply_text, sentiment, content_type, datetime.utcnow()))
+            CREATE TABLE IF NOT EXISTS logs (
+                tweet_id TEXT PRIMARY KEY,
+                reply_text TEXT,
+                sentiment TEXT,
+                content_type TEXT,
+                timestamp TEXT,
+                mention_timestamp TEXT,
+                polarity REAL,
+                subjectivity REAL,
+                is_question INTEGER,
+                has_hashtags INTEGER,
+                has_mentions INTEGER,
+                length INTEGER,
+                contains_ruck INTEGER,
+                contains_emojis INTEGER
+            )
+        """)
+        
+        # Insert interaction with context
+        cursor.execute("""
+            INSERT OR REPLACE INTO logs (
+                tweet_id, reply_text, sentiment, content_type, timestamp, mention_timestamp,
+                polarity, subjectivity, is_question, has_hashtags, has_mentions,
+                length, contains_ruck, contains_emojis
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            str(tweet_id),
+            reply_text,
+            sentiment,
+            content_type,
+            datetime.utcnow(),
+            mention_timestamp,
+            sentiment_context.get('polarity', 0),
+            sentiment_context.get('subjectivity', 0),
+            1 if sentiment_context.get('is_question', False) else 0,
+            1 if sentiment_context.get('has_hashtags', False) else 0,
+            1 if sentiment_context.get('has_mentions', False) else 0,
+            sentiment_context.get('length', 0),
+            1 if sentiment_context.get('contains_ruck', False) else 0,
+            1 if sentiment_context.get('contains_emojis', False) else 0
+        ))
+        
         conn.commit()
         conn.close()
-        logger.info(f"Logged interaction for tweet {tweet_id}")
+        logger.info(f"Logged interaction for tweet {tweet_id} with enhanced context")
         return True
     except Exception as e:
         logger.error(f"Error logging interaction for tweet {tweet_id}: {e}")
