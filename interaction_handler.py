@@ -25,6 +25,17 @@ def monitor_mentions(x_client, xai_headers):
     logger.info("Starting to monitor mentions for @getrucky")
     while True:
         try:
+            # Add diagnostic logging for the client
+            logger.info(f"Mention monitoring using client: {type(x_client)}")
+            try:
+                me_check = x_client.get_me()
+                if me_check.data:
+                    logger.info(f"Mention client authenticated for @{me_check.data.username}")
+                else:
+                    logger.warning("Mention client get_me() returned no data.")
+            except Exception as e_check:
+                logger.error(f"Mention client get_me() check failed: {e_check}")
+            
             # Reset reply count every hour
             if time.time() - start_time > 3600:
                 replies_count = 0
