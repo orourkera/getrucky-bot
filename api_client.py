@@ -11,36 +11,48 @@ logger = logging.getLogger(__name__)
 def initialize_x_client():
     """Initialize and return X API client with OAuth 1.0a authentication using v2 API."""
     try:
-        # First try with OAuth 1.0a
+        # Try both OAuth 1.0a and Bearer token in parallel
+        oauth_client = None
+        bearer_client = None
+        oauth_error = None
+        bearer_error = None
+
+        # Try OAuth 1.0a
         try:
-            client = tweepy.Client(
+            oauth_client = tweepy.Client(
                 consumer_key=X_API_KEY,
                 consumer_secret=X_API_SECRET,
                 access_token=X_ACCESS_TOKEN,
                 access_token_secret=X_ACCESS_TOKEN_SECRET
             )
             # Verify credentials by fetching user info
-            client.get_me()
+            oauth_client.get_me()
             logger.info("X API client initialized successfully with OAuth 1.0a")
-            return client
-        except Exception as oauth_error:
-            logger.warning(f"OAuth 1.0a initialization failed: {oauth_error}")
-            
-            # Fall back to Bearer token if available
-            bearer_token = get_config('X_BEARER_TOKEN')
-            if bearer_token:
-                try:
-                    client = tweepy.Client(bearer_token=bearer_token)
-                    # Verify credentials by fetching user info
-                    client.get_me()
-                    logger.info("X API client initialized successfully with Bearer token")
-                    return client
-                except Exception as bearer_error:
-                    logger.error(f"Bearer token initialization failed: {bearer_error}")
-                    raise
-            else:
-                logger.error("No valid authentication method available")
-                raise Exception("No valid authentication method available")
+            return oauth_client
+        except Exception as e:
+            oauth_error = e
+            logger.warning(f"OAuth 1.0a initialization failed: {e}")
+
+        # Try Bearer token
+        bearer_token = get_config('X_BEARER_TOKEN')
+        if bearer_token:
+            try:
+                bearer_client = tweepy.Client(bearer_token=bearer_token)
+                # Verify credentials by fetching user info
+                bearer_client.get_me()
+                logger.info("X API client initialized successfully with Bearer token")
+                return bearer_client
+            except Exception as e:
+                bearer_error = e
+                logger.warning(f"Bearer token initialization failed: {e}")
+
+        # If both methods failed, raise a detailed error
+        error_msg = "Failed to initialize X API client:\n"
+        if oauth_error:
+            error_msg += f"OAuth 1.0a error: {oauth_error}\n"
+        if bearer_error:
+            error_msg += f"Bearer token error: {bearer_error}"
+        raise Exception(error_msg)
             
     except Exception as e:
         logger.error(f"Failed to initialize X API client: {e}")
