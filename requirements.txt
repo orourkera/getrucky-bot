@@ -3,5 +3,10 @@
 tweepy==4.14.0
 requests==2.31.0
 textblob==0.17.1
-apscheduler==3.10.1
-psycopg2==2.9.5 
+apscheduler==3.10.4
+psycopg2-binary==2.9.9
+flask==3.0.2
+psutil==5.9.8
+pytest==8.0.2
+pytest-cov==4.1.0
+pytest-mock==3.12.0 
