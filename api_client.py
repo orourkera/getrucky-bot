@@ -3,7 +3,7 @@
 import tweepy
 import requests
 import logging
-from config import X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRET, APP_API_TOKEN, XAI_API_KEY
+from config import X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRET, APP_API_TOKEN, XAI_API_KEY, X_BEARER_TOKEN
 
 logger = logging.getLogger(__name__)
 
@@ -11,16 +11,28 @@ logger = logging.getLogger(__name__)
 def initialize_x_client():
     """Initialize and return X API client with OAuth 1.0a authentication using v2 API."""
     try:
-        client = tweepy.Client(
-            consumer_key=X_API_KEY,
-            consumer_secret=X_API_SECRET,
-            access_token=X_ACCESS_TOKEN,
-            access_token_secret=X_ACCESS_TOKEN_SECRET
-        )
-        # Verify credentials by fetching user info
-        client.get_me()
-        logger.info("X API client initialized successfully with v2 API")
-        return client
+        # First try with OAuth 1.0a
+        try:
+            client = tweepy.Client(
+                consumer_key=X_API_KEY,
+                consumer_secret=X_API_SECRET,
+                access_token=X_ACCESS_TOKEN,
+                access_token_secret=X_ACCESS_TOKEN_SECRET
+            )
+            # Verify credentials by fetching user info
+            client.get_me()
+            logger.info("X API client initialized successfully with OAuth 1.0a")
+            return client
+        except Exception as oauth_error:
+            logger.warning(f"OAuth 1.0a initialization failed: {oauth_error}")
+            
+            # Fall back to Bearer token
+            client = tweepy.Client(bearer_token=X_BEARER_TOKEN)
+            # Verify credentials by fetching user info
+            client.get_me()
+            logger.info("X API client initialized successfully with Bearer token")
+            return client
+            
     except Exception as e:
         logger.error(f"Failed to initialize X API client: {e}")
         raise
