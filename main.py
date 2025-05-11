@@ -50,9 +50,18 @@ def main():
         x_client = api_client.initialize_x_client()
         app_client = api_client.initialize_app_client()
         xai_client = api_client.initialize_xai_client()
+        
+        # Get the authenticated user's ID once
+        me_response = x_client.get_me()
+        if not me_response.data:
+            logger.error("Failed to get authenticated user ID. Exiting.")
+            sys.exit(1)
+        authenticated_user_id = me_response.data.id
+        logger.info(f"Authenticated user ID: {authenticated_user_id} for @{me_response.data.username}")
+        
         logger.info("API clients initialized successfully")
     except Exception as e:
-        logger.error(f"Failed to initialize API clients: {e}")
+        logger.error(f"Failed to initialize API clients or get user ID: {e}")
         sys.exit(1)
     
     # If DATABASE_URL is set, try to restore databases from Postgres
@@ -89,7 +98,7 @@ def main():
 
     # Start monitoring mentions in a background thread
     logger.info("Starting mention monitoring in background thread")
-    threading.Thread(target=interaction_handler.monitor_mentions, args=(x_client, xai_client), daemon=True).start()
+    threading.Thread(target=interaction_handler.monitor_mentions, args=(x_client, xai_client, authenticated_user_id), daemon=True).start()
 
     # Start cross-posting in a background thread
     logger.info("Starting cross-posting in background thread")

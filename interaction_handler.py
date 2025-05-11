@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 INTERACTION_LOG_DB = '/tmp/interaction_log.db'
 
 
-def monitor_mentions(x_client, xai_headers):
+def monitor_mentions(x_client, xai_headers, user_id_to_monitor):
     """Monitor mentions of @getrucky and reply based on enhanced sentiment analysis."""
     last_id = None
     replies_count = 0
@@ -39,13 +39,7 @@ def monitor_mentions(x_client, xai_headers):
             
             # Search for mentions with specific error handling
             try:
-                me = x_client.get_me() # Necessary to get the ID for mentions endpoint
-                if not me.data:
-                    logger.error("Could not get user ID for mention monitoring.")
-                    time.sleep(300)
-                    continue
-
-                mentions_response = x_client.get_users_mentions(me.data.id, since_id=last_id, max_results=20)
+                mentions_response = x_client.get_users_mentions(user_id_to_monitor, since_id=last_id, max_results=20)
                 mentions = mentions_response.data if mentions_response and mentions_response.data else []
             
             except tweepy.TooManyRequests:
