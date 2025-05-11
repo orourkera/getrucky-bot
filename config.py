@@ -85,7 +85,7 @@ def get_config(key: str) -> Any:
 def validate_config():
     required_keys = [
         'X_API_KEY', 'X_API_SECRET', 'X_ACCESS_TOKEN', 'X_ACCESS_TOKEN_SECRET',
-        'XAI_API_KEY', 'APP_API_TOKEN'
+        'XAI_API_KEY'
     ]
     status = {}
     for key in required_keys:
