@@ -14,8 +14,12 @@ from config import get_config, validate_config, SQLITE_DB_PATH
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize Flask app
-app = Flask("dashboard_app")
+# Determine the absolute path to the directory of dashboard.py
+APP_ROOT = os.path.dirname(os.path.abspath(__file__))
+TEMPLATE_FOLDER = os.path.join(APP_ROOT, 'templates')
+
+# Initialize Flask app, explicitly setting template_folder
+app = Flask("dashboard_app", template_folder=TEMPLATE_FOLDER)
 
 # Initialize X client lazily
 x_client = None
