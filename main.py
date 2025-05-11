@@ -73,14 +73,14 @@ def main():
         scheduler_instance.add_job(
             scheduler.schedule_posts,
             CronTrigger(hour=hour, minute=0),
-            args=[x_client, xai_client]
+            args=[scheduler_instance, x_client, app_client, xai_client]
         )
     
     # Schedule engagement tasks
     scheduler_instance.add_job(
         scheduler.schedule_engagement,
         CronTrigger(minute='*/5'),  # Every 5 minutes
-        args=[x_client]
+        args=[scheduler_instance, x_client, xai_client]
     )
     
     # Start scheduler
