@@ -14,15 +14,29 @@ import backup
 import ai_model
 import moderation
 import analytics
+from flask import Flask, jsonify
+from health import get_health_status
+from config import get_config, validate_config
+import threading
 
 # Configure logging for Heroku Logplex
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# Initialize Flask app
+app = Flask(__name__)
 
 def main():
     """Main function to initialize and run the AI Marketing Bot."""
     logger.info("Starting AI Marketing Bot for @getrucky")
+    
+    # Validate configuration
+    logger.info("Validating configuration")
+    config_status = validate_config()
+    if not all(config_status.values()):
+        logger.error("Missing required environment variables. Please check the configuration.")
+        sys.exit(1)
+    logger.info("Configuration validated successfully")
     
     # Initialize databases
     logger.info("Initializing databases")
@@ -52,89 +66,50 @@ def main():
     
     # Initialize scheduler for posts and engagement
     logger.info("Initializing scheduler")
-    bot_scheduler = BackgroundScheduler(timezone="UTC")
+    scheduler_instance = BackgroundScheduler()
     
-    # Schedule posts and engagement tasks
-    scheduler.schedule_posts(bot_scheduler, x_client, app_client, xai_client)
-    scheduler.schedule_engagement(bot_scheduler, x_client, xai_client)
+    # Schedule posts
+    for hour in get_config('POST_TIMES'):
+        scheduler_instance.add_job(
+            scheduler.schedule_posts,
+            CronTrigger(hour=hour, minute=0),
+            args=[x_client, xai_client]
+        )
     
-    # Schedule maintenance tasks
-    schedule_maintenance_tasks(bot_scheduler, x_client)
+    # Schedule engagement tasks
+    scheduler_instance.add_job(
+        scheduler.schedule_engagement,
+        CronTrigger(minute='*/5'),  # Every 5 minutes
+        args=[x_client]
+    )
     
-    # Start the scheduler
-    bot_scheduler.start()
-    logger.info("Scheduler started for posts, engagement, and maintenance tasks")
-    
-    # Start monitoring mentions
+    # Start scheduler
+    scheduler_instance.start()
+    logger.info("Scheduler started successfully")
+
+    # Start monitoring mentions in a background thread
+    logger.info("Starting mention monitoring in background thread")
+    threading.Thread(target=interaction_handler.monitor_mentions, args=(x_client, xai_client), daemon=True).start()
+
+    # Start cross-posting in a background thread
+    logger.info("Starting cross-posting in background thread")
+    threading.Thread(target=cross_post.engage_with_posts, args=(x_client, xai_client), daemon=True).start()
+
+    # Run Flask app
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+
+@app.route('/health')
+def health_check():
+    """Health check endpoint."""
     try:
-        logger.info("Starting mention monitoring")
-        interaction_handler.monitor_mentions(x_client, xai_client)
+        health_status = get_health_status(x_client)
+        return jsonify(health_status)
     except Exception as e:
-        logger.error(f"Error in monitoring mentions: {e}")
-        # Attempt to restart monitoring
-        logger.info("Restarting mention monitoring...")
-        interaction_handler.monitor_mentions(x_client, xai_client)
-    
-    logger.info("AI Marketing Bot is fully operational")
+        logger.error(f"Health check failed: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
 
-def schedule_maintenance_tasks(scheduler, x_client):
-    """Schedule maintenance tasks like backups, cache cleanup, and analytics."""
-    
-    # Daily database backup
-    scheduler.add_job(
-        backup.backup_db,
-        CronTrigger(hour=3, minute=0),  # Run at 3 AM UTC
-        id='daily_backup'
-    )
-    logger.info("Scheduled daily database backup at 3:00 UTC")
-    
-    # Clear expired cache entries daily
-    scheduler.add_job(
-        ai_model.clear_expired_cache_entries,
-        CronTrigger(hour=2, minute=30),  # Run at 2:30 AM UTC
-        id='clear_cache'
-    )
-    logger.info("Scheduled daily cache cleanup at 2:30 UTC")
-    
-    # Track engagement metrics every 4 hours
-    scheduler.add_job(
-        lambda: analytics.track_engagement(x_client),
-        'interval',
-        hours=4,
-        id='track_engagement'
-    )
-    logger.info("Scheduled engagement tracking every 4 hours")
-    
-    # Generate and log weekly summary every Sunday
-    scheduler.add_job(
-        analytics.log_weekly_summary,
-        CronTrigger(day_of_week=6, hour=12, minute=0),  # Sunday at noon UTC
-        id='weekly_summary'
-    )
-    logger.info("Scheduled weekly analytics summary on Sundays at 12:00 UTC")
-    
-    # Monitor API rate limits every hour
-    scheduler.add_job(
-        monitor_api_limits,
-        'interval',
-        hours=1,
-        id='monitor_limits'
-    )
-    logger.info("Scheduled hourly API rate limit monitoring")
-
-def monitor_api_limits():
-    """Monitor API rate limits and log warnings if approaching limits."""
-    api_types = ['x_tweet', 'x_like', 'x_retweet', 'x_search', 'xai']
-    
-    for api_type in api_types:
-        is_limited, wait_time = moderation.rate_limit_check(api_type)
-        
-        if is_limited:
-            logger.warning(f"API rate limit concern for {api_type}: {wait_time}s until reset")
-    
-    # Log API usage statistics
-    usage_stats = moderation.get_api_usage()
-    logger.info(f"API usage statistics (hourly): {usage_stats['hourly']}")
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     main() 
