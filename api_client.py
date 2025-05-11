@@ -7,10 +7,34 @@ from config import X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRE
 
 logger = logging.getLogger(__name__)
 
+def validate_oauth_credentials():
+    """Validate that OAuth 1.0a credentials are in the correct format."""
+    if not all([X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRET]):
+        raise ValueError("Missing required OAuth 1.0a credentials")
+    
+    # API Key should be a string of reasonable length
+    if not isinstance(X_API_KEY, str) or len(X_API_KEY) < 10:
+        raise ValueError("Invalid API Key format")
+    
+    # API Secret should be a string of reasonable length
+    if not isinstance(X_API_SECRET, str) or len(X_API_SECRET) < 10:
+        raise ValueError("Invalid API Secret format")
+    
+    # Access Token should be a string of reasonable length
+    if not isinstance(X_ACCESS_TOKEN, str) or len(X_ACCESS_TOKEN) < 10:
+        raise ValueError("Invalid Access Token format")
+    
+    # Access Token Secret should be a string of reasonable length
+    if not isinstance(X_ACCESS_TOKEN_SECRET, str) or len(X_ACCESS_TOKEN_SECRET) < 10:
+        raise ValueError("Invalid Access Token Secret format")
+
 # X API Client
 def initialize_x_client():
     """Initialize and return X API client with OAuth 1.0a authentication using v2 API."""
     try:
+        # Validate credentials first
+        validate_oauth_credentials()
+        
         # Initialize with OAuth 1.0a for full access
         client = tweepy.Client(
             consumer_key=X_API_KEY,
@@ -41,20 +65,12 @@ def initialize_readonly_client():
     try:
         bearer_token = get_config('X_BEARER_TOKEN')
         if not bearer_token:
-            raise Exception("No Bearer token available")
+            logger.warning("No Bearer token available for read-only client.")
+            return None
             
         client = tweepy.Client(bearer_token=bearer_token, wait_on_rate_limit=True)
-        # Verify credentials by fetching user info
-        try:
-            me = client.get_me()
-            if me.data:
-                logger.info(f"Read-only X API client initialized successfully with Bearer token for user @{me.data.username}")
-                return client
-            else:
-                raise Exception("Failed to get user info")
-        except Exception as e:
-            logger.error(f"Failed to verify Bearer token credentials: {e}")
-            return None
+        logger.info("Read-only X API client initialized with Bearer token (verification skipped).")
+        return client
             
     except Exception as e:
         logger.error(f"Failed to initialize read-only X API client: {e}")
