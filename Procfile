@@ -1,2 +1,2 @@
-web: flask --app dashboard:app run --host=0.0.0.0 --port=$PORT
+web: gunicorn --worker-tmp-dir /dev/shm -k gevent -w 2 dashboard:app 
 worker: python main.py 

@@ -49,7 +49,7 @@ def _initialize_global_x_client_thread():
     
     try:
         logger.info("Dashboard background thread: Attempting to initialize global X client...")
-        client = api_client.initialize_x_client()
+        client = api_client.initialize_x_client(verify=False)
         if client:
             x_client_global = client
             logger.info("Dashboard background thread: Global X client initialized successfully.")

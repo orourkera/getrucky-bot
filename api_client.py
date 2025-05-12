@@ -4,6 +4,7 @@ import tweepy
 import requests
 import logging
 import time
+from typing import Optional
 from config import X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRET, APP_API_TOKEN, XAI_API_KEY, get_config
 
 logger = logging.getLogger(__name__)
@@ -30,7 +31,7 @@ def validate_oauth_credentials():
         raise ValueError("Invalid Access Token Secret format")
 
 # X API Client
-def initialize_x_client(max_retries=3, retry_delay=5):
+def initialize_x_client(max_retries=3, retry_delay=5, verify: Optional[bool] = True):
     """Initialize and return X API client with OAuth 1.0a authentication using v2 API."""
     for attempt in range(max_retries):
         try:
@@ -48,32 +49,38 @@ def initialize_x_client(max_retries=3, retry_delay=5):
                 wait_on_rate_limit=True
             )
             
-            # Verify credentials by fetching user info with specific error handling
-            try:
-                logger.info("Verifying OAuth 1.0a credentials by fetching user info")
-                me = client.get_me()
-                if me and hasattr(me, 'data') and me.data:
-                    logger.info(f"X API client initialized successfully with OAuth 1.0a for user @{me.data.username} (ID: {me.data.id})")
-                    return client
-                else:
-                    logger.warning("Failed to get user info during client verification - empty response")
-                    raise Exception("Failed to get user info - empty response")
-                    
-            except tweepy.errors.Unauthorized as unauth_error:
-                logger.error(f"Unauthorized error during client verification: {unauth_error}")
-                if hasattr(unauth_error, 'response') and unauth_error.response is not None:
-                    logger.error(f"Response: {unauth_error.response.status_code} - {unauth_error.response.text}")
-                raise
-            except tweepy.errors.TooManyRequests as rate_error:
-                logger.warning(f"Rate limit hit during client verification: {rate_error}")
-                # Don't fail completely, just wait and retry
-                time.sleep(retry_delay * (attempt + 1))
-                continue
-            except Exception as verify_error:
-                logger.error(f"Error verifying client credentials: {verify_error}")
-                if hasattr(verify_error, 'response') and verify_error.response is not None:
-                    logger.error(f"Response: {verify_error.response.status_code} - {verify_error.response.text}")
-                raise
+            # Optionally verify credentials
+            if verify:
+                try:
+                    logger.info("Verifying OAuth 1.0a credentials by fetching user info")
+                    me = client.get_me()
+                    if me and hasattr(me, 'data') and me.data:
+                        logger.info(f"X API client initialized successfully with OAuth 1.0a for user @{me.data.username} (ID: {me.data.id})")
+                        return client
+                    else:
+                        logger.warning("Failed to get user info during client verification - empty response")
+                        raise Exception("Failed to get user info - empty response")
+                        
+                except tweepy.errors.Unauthorized as unauth_error:
+                    logger.error(f"Unauthorized error during client verification: {unauth_error}")
+                    if hasattr(unauth_error, 'response') and unauth_error.response is not None:
+                        logger.error(f"Response: {unauth_error.response.status_code} - {unauth_error.response.text}")
+                    raise
+                except tweepy.errors.TooManyRequests as rate_error:
+                    logger.warning(f"Rate limit hit during client verification: {rate_error}")
+                    # Don't fail completely, just wait and retry
+                    time.sleep(retry_delay * (attempt + 1))
+                    continue
+                except Exception as verify_error:
+                    logger.error(f"Error verifying client credentials: {verify_error}")
+                    if hasattr(verify_error, 'response') and verify_error.response is not None:
+                        logger.error(f"Response: {verify_error.response.status_code} - {verify_error.response.text}")
+                    raise
+                # end verify block
+            else:
+                # No verification requested
+                logger.info("X API client created without credential verification (verify=False)")
+                return client
                 
         except Exception as e:
             logger.error(f"Failed to initialize X API client on attempt {attempt + 1}/{max_retries}: {e}")
