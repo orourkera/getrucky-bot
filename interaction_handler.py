@@ -98,8 +98,8 @@ def monitor_mentions(x_client, xai_headers, user_id_to_monitor):
                 continue
 
             if not mentions:
-                logger.info("No new mentions found. Sleeping for 5 minutes.")
-                time.sleep(300)  # Sleep for 5 minutes if no mentions
+                logger.info("No new mentions found. Sleeping for 15 minutes.")
+                time.sleep(900)  # Sleep for 15 minutes if no mentions
                 continue
             
             for mention in mentions:
@@ -171,8 +171,8 @@ def monitor_mentions(x_client, xai_headers, user_id_to_monitor):
                 # Small delay to avoid rate limiting
                 time.sleep(10)
             
-            logger.info(f"Processed {len(mentions)} mentions. Sleeping for 5 minutes.")
-            time.sleep(300)  # Check every 5 minutes
+            logger.info(f"Processed {len(mentions)} mentions. Sleeping for 15 minutes.")
+            time.sleep(900)  # Check every 15 minutes
         except Exception as e:
             logger.error(f"Error monitoring mentions: {e}")
             time.sleep(600)  # Wait longer on error (10 minutes)
