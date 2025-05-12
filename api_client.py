@@ -31,7 +31,7 @@ def validate_oauth_credentials():
         raise ValueError("Invalid Access Token Secret format")
 
 # X API Client
-def initialize_x_client(max_retries=3, retry_delay=5, verify: Optional[bool] = True):
+def initialize_x_client(max_retries=3, retry_delay=5, verify: Optional[bool] = True, wait_on_rate_limit: bool = True):
     """Initialize and return X API client with OAuth 1.0a authentication using v2 API."""
     for attempt in range(max_retries):
         try:
@@ -46,7 +46,7 @@ def initialize_x_client(max_retries=3, retry_delay=5, verify: Optional[bool] = T
                 consumer_secret=X_API_SECRET,
                 access_token=X_ACCESS_TOKEN,
                 access_token_secret=X_ACCESS_TOKEN_SECRET,
-                wait_on_rate_limit=True
+                wait_on_rate_limit=wait_on_rate_limit
             )
             
             # Optionally verify credentials
