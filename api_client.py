@@ -3,6 +3,7 @@
 import tweepy
 import requests
 import logging
+import time
 from config import X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRET, APP_API_TOKEN, XAI_API_KEY, get_config
 
 logger = logging.getLogger(__name__)
@@ -29,36 +30,62 @@ def validate_oauth_credentials():
         raise ValueError("Invalid Access Token Secret format")
 
 # X API Client
-def initialize_x_client():
+def initialize_x_client(max_retries=3, retry_delay=5):
     """Initialize and return X API client with OAuth 1.0a authentication using v2 API."""
-    try:
-        # Validate credentials first
-        validate_oauth_credentials()
-        
-        # Initialize with OAuth 1.0a for full access
-        client = tweepy.Client(
-            consumer_key=X_API_KEY,
-            consumer_secret=X_API_SECRET,
-            access_token=X_ACCESS_TOKEN,
-            access_token_secret=X_ACCESS_TOKEN_SECRET,
-            wait_on_rate_limit=True
-        )
-        
-        # Verify credentials by fetching user info
+    for attempt in range(max_retries):
         try:
-            me = client.get_me()
-            if me.data:
-                logger.info(f"X API client initialized successfully with OAuth 1.0a for user @{me.data.username}")
-                return client
-            else:
-                raise Exception("Failed to get user info")
-        except Exception as e:
-            logger.error(f"Failed to verify OAuth 1.0a credentials: {e}")
-            raise
+            # Validate credentials first
+            validate_oauth_credentials()
             
-    except Exception as e:
-        logger.error(f"Failed to initialize X API client: {e}")
-        raise
+            logger.info(f"Initializing X client (attempt {attempt + 1}/{max_retries})")
+            
+            # Initialize with OAuth 1.0a for full access
+            client = tweepy.Client(
+                consumer_key=X_API_KEY,
+                consumer_secret=X_API_SECRET,
+                access_token=X_ACCESS_TOKEN,
+                access_token_secret=X_ACCESS_TOKEN_SECRET,
+                wait_on_rate_limit=True
+            )
+            
+            # Verify credentials by fetching user info with specific error handling
+            try:
+                logger.info("Verifying OAuth 1.0a credentials by fetching user info")
+                me = client.get_me()
+                if me and hasattr(me, 'data') and me.data:
+                    logger.info(f"X API client initialized successfully with OAuth 1.0a for user @{me.data.username} (ID: {me.data.id})")
+                    return client
+                else:
+                    logger.warning("Failed to get user info during client verification - empty response")
+                    raise Exception("Failed to get user info - empty response")
+                    
+            except tweepy.errors.Unauthorized as unauth_error:
+                logger.error(f"Unauthorized error during client verification: {unauth_error}")
+                if hasattr(unauth_error, 'response') and unauth_error.response is not None:
+                    logger.error(f"Response: {unauth_error.response.status_code} - {unauth_error.response.text}")
+                raise
+            except tweepy.errors.TooManyRequests as rate_error:
+                logger.warning(f"Rate limit hit during client verification: {rate_error}")
+                # Don't fail completely, just wait and retry
+                time.sleep(retry_delay * (attempt + 1))
+                continue
+            except Exception as verify_error:
+                logger.error(f"Error verifying client credentials: {verify_error}")
+                if hasattr(verify_error, 'response') and verify_error.response is not None:
+                    logger.error(f"Response: {verify_error.response.status_code} - {verify_error.response.text}")
+                raise
+                
+        except Exception as e:
+            logger.error(f"Failed to initialize X API client on attempt {attempt + 1}/{max_retries}: {e}")
+            if attempt < max_retries - 1:
+                logger.info(f"Retrying in {retry_delay} seconds...")
+                time.sleep(retry_delay)
+            else:
+                logger.error("All attempts to initialize X API client failed")
+                raise
+    
+    # If we get here, all attempts failed
+    raise Exception(f"Failed to initialize X API client after {max_retries} attempts")
 
 def initialize_readonly_client():
     """Initialize and return a read-only X API client using Bearer token."""
@@ -76,63 +103,123 @@ def initialize_readonly_client():
         logger.error(f"Failed to initialize read-only X API client: {e}")
         return None
 
-def post_tweet(client, text, media=None):
+def post_tweet(client, text, media=None, max_retries=2):
     """Post a tweet with optional media using v2 API."""
-    try:
-        if media:
-            # Media upload still uses v1.1 API, need separate handling
-            auth = tweepy.OAuthHandler(X_API_KEY, X_API_SECRET)
-            auth.set_access_token(X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRET)
-            api = tweepy.API(auth, wait_on_rate_limit=True)
-            media_upload = api.media_upload(filename=media)
-            media_id = media_upload.media_id_string
-            result = client.create_tweet(text=text, media_ids=[media_id])
-        else:
-            result = client.create_tweet(text=text)
-        logger.info(f"Posted tweet: {text[:50]}...")
-        return result.data['id']
-    except Exception as e:
-        logger.error(f"Error posting tweet: {e}")
-        raise
+    for attempt in range(max_retries + 1):
+        try:
+            if media:
+                # Media upload still uses v1.1 API, need separate handling
+                auth = tweepy.OAuth1UserHandler(X_API_KEY, X_API_SECRET)
+                auth.set_access_token(X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRET)
+                api = tweepy.API(auth, wait_on_rate_limit=True)
+                media_upload = api.media_upload(filename=media)
+                media_id = media_upload.media_id_string
+                result = client.create_tweet(text=text, media_ids=[media_id])
+            else:
+                result = client.create_tweet(text=text)
+            logger.info(f"Posted tweet: {text[:50]}...")
+            return result.data['id']
+        except tweepy.errors.Unauthorized as unauth:
+            logger.error(f"Unauthorized error posting tweet (attempt {attempt+1}/{max_retries+1}): {unauth}")
+            if hasattr(unauth, 'response') and unauth.response is not None:
+                logger.error(f"Response: {unauth.response.status_code} - {unauth.response.text}")
+            # Don't retry unauthorized - credentials are wrong
+            raise
+        except tweepy.errors.TooManyRequests as rate:
+            logger.warning(f"Rate limit hit posting tweet (attempt {attempt+1}/{max_retries+1}): {rate}")
+            if attempt < max_retries:
+                wait_time = 60 * (attempt + 1)  # Exponential backoff: 1 minute, then 2 minutes
+                logger.info(f"Waiting {wait_time} seconds before retry...")
+                time.sleep(wait_time)
+            else:
+                raise
+        except Exception as e:
+            logger.error(f"Error posting tweet (attempt {attempt+1}/{max_retries+1}): {e}")
+            if attempt < max_retries:
+                time.sleep(30)  # Wait 30 seconds before retry
+            else:
+                raise
 
-def reply_to_tweet(client, tweet_id, text, media=None):
+def reply_to_tweet(client, tweet_id, text, media=None, max_retries=2):
     """Reply to a specific tweet with optional media."""
-    try:
-        if media:
-            # Media upload still uses v1.1 API, need separate handling
-            auth = tweepy.OAuthHandler(X_API_KEY, X_API_SECRET)
-            auth.set_access_token(X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRET)
-            api = tweepy.API(auth, wait_on_rate_limit=True)
-            media_upload = api.media_upload(filename=media)
-            media_id = media_upload.media_id_string
-            result = client.create_tweet(text=text, media_ids=[media_id], in_reply_to_tweet_id=tweet_id)
-        else:
-            result = client.create_tweet(text=text, in_reply_to_tweet_id=tweet_id)
-        logger.info(f"Replied to tweet {tweet_id}: {text[:50]}...")
-        return result.data['id']
-    except Exception as e:
-        logger.error(f"Error replying to tweet {tweet_id}: {e}")
-        raise
+    for attempt in range(max_retries + 1):
+        try:
+            if media:
+                # Media upload still uses v1.1 API, need separate handling
+                auth = tweepy.OAuth1UserHandler(X_API_KEY, X_API_SECRET)
+                auth.set_access_token(X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRET)
+                api = tweepy.API(auth, wait_on_rate_limit=True)
+                media_upload = api.media_upload(filename=media)
+                media_id = media_upload.media_id_string
+                result = client.create_tweet(text=text, media_ids=[media_id], in_reply_to_tweet_id=tweet_id)
+            else:
+                result = client.create_tweet(text=text, in_reply_to_tweet_id=tweet_id)
+            logger.info(f"Replied to tweet {tweet_id}: {text[:50]}...")
+            return result.data['id']
+        except tweepy.errors.Unauthorized as unauth:
+            logger.error(f"Unauthorized error replying to tweet {tweet_id} (attempt {attempt+1}/{max_retries+1}): {unauth}")
+            if hasattr(unauth, 'response') and unauth.response is not None:
+                logger.error(f"Response: {unauth.response.status_code} - {unauth.response.text}")
+            # Don't retry unauthorized - credentials are wrong
+            raise
+        except tweepy.errors.TooManyRequests as rate:
+            logger.warning(f"Rate limit hit replying to tweet {tweet_id} (attempt {attempt+1}/{max_retries+1}): {rate}")
+            if attempt < max_retries:
+                wait_time = 60 * (attempt + 1)  # Exponential backoff: 1 minute, then 2 minutes
+                logger.info(f"Waiting {wait_time} seconds before retry...")
+                time.sleep(wait_time)
+            else:
+                raise
+        except Exception as e:
+            logger.error(f"Error replying to tweet {tweet_id} (attempt {attempt+1}/{max_retries+1}): {e}")
+            if attempt < max_retries:
+                time.sleep(30)  # Wait 30 seconds before retry
+            else:
+                raise
 
-def like_tweet(client, tweet_id):
+def like_tweet(client, tweet_id, max_retries=2):
     """Like a specific tweet."""
-    try:
-        client.like(tweet_id)
-        logger.info(f"Liked tweet {tweet_id}")
-        return True
-    except Exception as e:
-        logger.error(f"Error liking tweet {tweet_id}: {e}")
-        return False
+    for attempt in range(max_retries + 1):
+        try:
+            result = client.like(tweet_id)
+            logger.info(f"Liked tweet {tweet_id}")
+            return True
+        except tweepy.errors.TooManyRequests as rate:
+            logger.warning(f"Rate limit hit liking tweet {tweet_id} (attempt {attempt+1}/{max_retries+1}): {rate}")
+            if attempt < max_retries:
+                wait_time = 30 * (attempt + 1)
+                logger.info(f"Waiting {wait_time} seconds before retry...")
+                time.sleep(wait_time)
+            else:
+                return False
+        except Exception as e:
+            logger.error(f"Error liking tweet {tweet_id} (attempt {attempt+1}/{max_retries+1}): {e}")
+            if attempt < max_retries:
+                time.sleep(15)
+            else:
+                return False
 
-def retweet(client, tweet_id):
+def retweet(client, tweet_id, max_retries=2):
     """Retweet a specific tweet."""
-    try:
-        client.retweet(tweet_id)
-        logger.info(f"Retweeted tweet {tweet_id}")
-        return True
-    except Exception as e:
-        logger.error(f"Error retweeting tweet {tweet_id}: {e}")
-        return False
+    for attempt in range(max_retries + 1):
+        try:
+            result = client.retweet(tweet_id)
+            logger.info(f"Retweeted tweet {tweet_id}")
+            return True
+        except tweepy.errors.TooManyRequests as rate:
+            logger.warning(f"Rate limit hit retweeting tweet {tweet_id} (attempt {attempt+1}/{max_retries+1}): {rate}")
+            if attempt < max_retries:
+                wait_time = 30 * (attempt + 1)
+                logger.info(f"Waiting {wait_time} seconds before retry...")
+                time.sleep(wait_time)
+            else:
+                return False
+        except Exception as e:
+            logger.error(f"Error retweeting tweet {tweet_id} (attempt {attempt+1}/{max_retries+1}): {e}")
+            if attempt < max_retries:
+                time.sleep(15)
+            else:
+                return False
 
 def search_tweets(client, query, min_likes=10):
     """Search recent tweets for a query, filter by minimum likes."""

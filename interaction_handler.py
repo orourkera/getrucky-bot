@@ -23,7 +23,22 @@ def monitor_mentions(x_client, xai_headers, user_id_to_monitor):
     replies_count = 0
     start_time = time.time()
     
-    logger.info("Starting to monitor mentions for @getrucky")
+    logger.info(f"Starting to monitor mentions for user_id: {user_id_to_monitor}")
+    
+    # Validate the x_client connection first
+    try:
+        # Verify credentials by fetching user info
+        me = x_client.get_me()
+        if not me.data:
+            logger.error("Failed to verify OAuth credentials in monitor_mentions. X client authentication failed.")
+            return
+        logger.info(f"X API client authenticated successfully for user @{me.data.username} (ID: {me.data.id})")
+    except Exception as auth_error:
+        logger.error(f"Authentication error in monitor_mentions: {auth_error}")
+        if hasattr(auth_error, 'response') and auth_error.response is not None:
+            logger.error(f"Auth error response: {auth_error.response.status_code} - {auth_error.response.text}")
+        return
+    
     while True:
         try:
             # Reset reply count every hour
@@ -39,16 +54,45 @@ def monitor_mentions(x_client, xai_headers, user_id_to_monitor):
             
             # Search for mentions with specific error handling
             try:
-                mentions_response = x_client.get_users_mentions(user_id_to_monitor, since_id=last_id, max_results=20)
-                mentions = mentions_response.data if mentions_response and mentions_response.data else []
+                logger.info(f"Fetching mentions for user_id: {user_id_to_monitor}")
+                # Make sure to specify tweet fields we need
+                mentions_response = x_client.get_users_mentions(
+                    id=user_id_to_monitor,  # Explicitly name the parameter
+                    since_id=last_id, 
+                    max_results=20,
+                    tweet_fields=['created_at', 'author_id', 'text', 'id'],
+                    user_fields=['username']
+                )
+                
+                mentions = mentions_response.data if mentions_response and hasattr(mentions_response, 'data') else []
+                
+                # Log the raw API response for debugging
+                if hasattr(mentions_response, 'data'):
+                    logger.info(f"Got {len(mentions_response.data)} mentions")
+                else:
+                    logger.warning("No mentions data returned in response")
             
-            except tweepy.TooManyRequests:
+            except tweepy.errors.TooManyRequests:
                 logger.warning("Rate limit hit on get_users_mentions. Sleeping for 15 minutes.")
                 time.sleep(900) # Sleep for 15 minutes
                 continue
-            except tweepy.TweepyException as e_tweepy:
-                logger.error(f"Error fetching mentions (TweepyException): {e_tweepy}")
-                if e_tweepy.response is not None:
+            except tweepy.errors.Unauthorized as unauth_error:
+                logger.error(f"Unauthorized error fetching mentions: {unauth_error}")
+                if hasattr(unauth_error, 'response') and unauth_error.response is not None:
+                    logger.error(f"Unauthorized response: {unauth_error.response.status_code} - {unauth_error.response.text}")
+                # Re-authenticate and retry
+                try:
+                    logger.info("Attempting to re-authenticate...")
+                    x_client = api_client.initialize_x_client()
+                    if x_client:
+                        logger.info("Re-authentication successful")
+                except Exception as re_auth_error:
+                    logger.error(f"Re-authentication failed: {re_auth_error}")
+                time.sleep(300)
+                continue
+            except Exception as e_tweepy:
+                logger.error(f"Error fetching mentions: {e_tweepy}")
+                if hasattr(e_tweepy, 'response') and e_tweepy.response is not None:
                     logger.error(f"API Response: {e_tweepy.response.status_code} - {e_tweepy.response.text}")
                 time.sleep(300)
                 continue
@@ -58,13 +102,34 @@ def monitor_mentions(x_client, xai_headers, user_id_to_monitor):
                 time.sleep(300)  # Sleep for 5 minutes if no mentions
                 continue
             
-            for mention in reversed(mentions):
+            for mention in mentions:
                 tweet_id = mention.id
                 if last_id is None or tweet_id > last_id:
                     last_id = tweet_id
                 
                 tweet_text = mention.text
-                username = mention.user.screen_name
+                
+                # Get the author username using the includes data if available
+                username = None
+                if hasattr(mentions_response, 'includes') and 'users' in mentions_response.includes:
+                    for user in mentions_response.includes['users']:
+                        if user.id == mention.author_id:
+                            username = user.username
+                            break
+                
+                # If username not found, fetch it directly
+                if not username:
+                    try:
+                        user_response = x_client.get_user(id=mention.author_id)
+                        if user_response.data:
+                            username = user_response.data.username
+                        else:
+                            logger.warning(f"Could not find username for author_id {mention.author_id}")
+                            username = "user"  # Fallback
+                    except Exception as user_error:
+                        logger.error(f"Error fetching username: {user_error}")
+                        username = "user"  # Fallback
+                
                 sentiment, sentiment_context = analyze_sentiment(tweet_text)
                 content_type = select_reply_content_type(sentiment, sentiment_context)
                 mention_timestamp = mention.created_at.isoformat() if hasattr(mention, 'created_at') else datetime.utcnow().isoformat()
@@ -86,17 +151,22 @@ def monitor_mentions(x_client, xai_headers, user_id_to_monitor):
                 if len(reply_text) > 280:
                     reply_text = reply_text[:277] + '...'
                 
-                if api_client.reply_to_tweet(x_client, tweet_id, reply_text):
-                    replies_count += 1
-                    log_interaction(
-                        tweet_id,
-                        reply_text,
-                        sentiment,
-                        content_type,
-                        mention_timestamp,
-                        sentiment_context
-                    )
-                    logger.info(f"Replied to mention by @{username} with sentiment {sentiment}: {reply_text[:50]}...")
+                try:
+                    if api_client.reply_to_tweet(x_client, tweet_id, reply_text):
+                        replies_count += 1
+                        log_interaction(
+                            tweet_id,
+                            reply_text,
+                            sentiment,
+                            content_type,
+                            mention_timestamp,
+                            sentiment_context
+                        )
+                        logger.info(f"Replied to mention by @{username} with sentiment {sentiment}: {reply_text[:50]}...")
+                except Exception as reply_error:
+                    logger.error(f"Error replying to tweet {tweet_id}: {reply_error}")
+                    if hasattr(reply_error, 'response') and reply_error.response is not None:
+                        logger.error(f"Reply error response: {reply_error.response.status_code} - {reply_error.response.text}")
                 
                 # Small delay to avoid rate limiting
                 time.sleep(10)
