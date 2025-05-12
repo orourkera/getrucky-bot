@@ -230,41 +230,35 @@ def retweet(client, tweet_id, max_retries=2):
                 return False
 
 def search_tweets(client, query, min_likes=10):
-    """Search recent tweets for a query, filter by minimum likes."""
+    """Search recent tweets for a query, filter by minimum likes using public_metrics from the search response."""
     try:
-        # Use read-only client for search if available
-        readonly_client = initialize_readonly_client()
-        search_client = readonly_client if readonly_client else client
-        
-        tweets = search_client.search_recent_tweets(query=query, max_results=100)
+        logger.info(f"API CALL: search_recent_tweets for query '{query}'")
+        tweets = client.search_recent_tweets(query=query, max_results=100, tweet_fields=['public_metrics'])
         if not tweets.data:
             return []
-            
-        filtered_tweets = []
-        for tweet in tweets.data:
-            # Get like count using read-only client
-            tweet_data = search_client.get_tweet(tweet.id, tweet_fields=['public_metrics'])
-            if tweet_data.data and tweet_data.data.public_metrics['like_count'] >= min_likes:
-                filtered_tweets.append(tweet)
-                
+        filtered_tweets = [tweet for tweet in tweets.data if hasattr(tweet, 'public_metrics') and tweet.public_metrics.get('like_count', 0) >= min_likes]
         logger.info(f"Searched for '{query}': found {len(filtered_tweets)} tweets with >= {min_likes} likes")
         return filtered_tweets
     except Exception as e:
         logger.error(f"Error searching tweets for '{query}': {e}")
         return []
 
+# Simple in-memory cache for user followers (per process run)
+_user_followers_cache = {}
 def get_user_followers(client, username):
-    """Fetch follower count for a user."""
+    """Fetch follower count for a user, with in-memory cache to avoid repeated lookups."""
     try:
-        # Use read-only client if available
+        if username in _user_followers_cache:
+            logger.info(f"Cache HIT for followers of {username}")
+            return _user_followers_cache[username]
+        logger.info(f"API CALL: get_user for username '{username}'")
         readonly_client = initialize_readonly_client()
         search_client = readonly_client if readonly_client else client
-        
         user = search_client.get_user(username=username, user_fields=['public_metrics'])
         if not user.data:
             return 0
-            
         follower_count = user.data.public_metrics['followers_count']
+        _user_followers_cache[username] = follower_count
         logger.info(f"Fetched follower count for {username}: {follower_count}")
         return follower_count
     except Exception as e:
