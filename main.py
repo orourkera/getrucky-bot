@@ -116,7 +116,7 @@ def main():
     logger.info("Scheduling engagement tasks")
     scheduler_instance.add_job(
         scheduler.schedule_engagement,
-        CronTrigger(minute='*/5'),  # Every 5 minutes
+        CronTrigger(hour='*/2'),  # Every 2 hours
         args=[scheduler_instance, x_client, xai_client]
     )
     
