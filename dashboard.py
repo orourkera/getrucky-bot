@@ -21,19 +21,32 @@ TEMPLATE_FOLDER = os.path.join(APP_ROOT, 'templates')
 # Initialize Flask app, explicitly setting template_folder
 app = Flask("dashboard_app", template_folder=TEMPLATE_FOLDER)
 
-# Initialize X client lazily
-x_client = None
+# Global X client and initialization status
+x_client_global = None
+x_client_init_error_global = None
 
-def get_x_client():
-    """Lazy initialization of X client."""
-    global x_client
-    if x_client is None:
+def initialize_global_x_client():
+    """Initialize the global X client once."""
+    global x_client_global, x_client_init_error_global
+    # Try to initialize only if it hasn't been attempted or if there was no error previously
+    # Or, more simply, just try once.
+    if x_client_global is None and x_client_init_error_global is None:
+        logger.info("Dashboard: Attempting to initialize global X client...")
         try:
-            x_client = api_client.initialize_x_client()
+            x_client_global = api_client.initialize_x_client()
+            if x_client_global:
+                logger.info("Dashboard: Global X client initialized successfully.")
+            else:
+                x_client_init_error_global = "Failed to initialize X client (returned None)."
+                logger.error(x_client_init_error_global)
         except Exception as e:
-            logger.error(f"Failed to initialize X client: {e}")
-            return None
-    return x_client
+            x_client_init_error_global = f"Dashboard: Failed to initialize global X client: {e}"
+            logger.error(x_client_init_error_global)
+            x_client_global = None # Ensure client is None on error
+
+# Call this when the app starts (or before the first request in a real server)
+# For development server, this will run when the module is loaded.
+initialize_global_x_client()
 
 def get_engagement_stats():
     """Get engagement statistics from analytics database."""
@@ -142,26 +155,35 @@ def get_content_stats():
 @app.route('/')
 def dashboard():
     """Render the main dashboard."""
+    global x_client_global, x_client_init_error_global
     try:
-        # Get health status
-        client = get_x_client()
-        health_status = get_health_status(client) if client else {'status': 'error', 'message': 'X client not initialized'}
+        current_x_client = x_client_global
+        health_status = None
+        if current_x_client:
+            try:
+                health_status = get_health_status(current_x_client)
+            except Exception as he:
+                logger.error(f"Error getting health status from dashboard: {he}")
+                health_status = {'status': 'error', 'message': f'Error in get_health_status: {he}'}
+        else:
+            health_status = {'status': 'error', 'message': x_client_init_error_global or 'X client not initialized (global)'}
         
-        # Get engagement stats
+        # Get engagement stats (ensure these are fast)
         engagement_stats = get_engagement_stats()
         
-        # Get content stats
+        # Get content stats (ensure these are fast)
         content_stats = get_content_stats()
         
-        # Get weekly summary
+        # Get weekly summary (ensure this is fast or handled differently)
         try:
             weekly_summary = analytics.summarize_interactions()
-        except Exception as e:
-            logger.error(f"Error getting weekly summary: {e}")
+        except Exception as e_summary:
+            logger.error(f"Error getting weekly summary for dashboard: {e_summary}")
             weekly_summary = {
                 'avg_response_time': 0,
                 'total_interactions': 0,
-                'engagement_rate': 0
+                'engagement_rate': 0,
+                'error': str(e_summary)
             }
         
         return render_template(
@@ -178,10 +200,21 @@ def dashboard():
 @app.route('/api/stats')
 def api_stats():
     """API endpoint for dashboard statistics."""
+    global x_client_global, x_client_init_error_global
     try:
-        client = get_x_client()
+        current_x_client = x_client_global
+        health_data = None
+        if current_x_client:
+            try:
+                health_data = get_health_status(current_x_client)
+            except Exception as he_api:
+                logger.error(f"Error getting health status for API: {he_api}")
+                health_data = {'status': 'error', 'message': f'Error in get_health_status for API: {he_api}'}
+        else:
+            health_data = {'status': 'error', 'message': x_client_init_error_global or 'X client not initialized (global)'}
+
         return jsonify({
-            'health': get_health_status(client) if client else {'status': 'error', 'message': 'X client not initialized'},
+            'health': health_data,
             'engagement': get_engagement_stats(),
             'content': get_content_stats(),
             'weekly': analytics.summarize_interactions()
@@ -198,4 +231,7 @@ if __name__ == '__main__':
     else:
         logger.info("Configuration validated successfully")
     
+    # Note: initialize_global_x_client() is already called at module load time.
+    # For a production WSGI server, you might use @app.before_first_request or similar,
+    # but for Heroku with gunicorn (default for Flask), module-level init is fine.
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000))) 
