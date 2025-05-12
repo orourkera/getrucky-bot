@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>@getrucky Bot Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <header class="mb-8">
+            <h1 class="text-3xl font-bold text-gray-800">@getrucky Bot Dashboard</h1>
+            <p class="text-gray-600">Last updated: <span id="last-updated"></span></p>
+        </header>
+
+        <!-- Health Status -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-4">System Health</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="p-4 bg-gray-50 rounded">
+                    <h3 class="font-medium text-gray-700">Overall Status</h3>
+                    <p class="text-2xl font-bold" id="overall-status"></p>
+                </div>
+                <div class="p-4 bg-gray-50 rounded">
+                    <h3 class="font-medium text-gray-700">API Status</h3>
+                    <div id="api-status"></div>
+                </div>
+                <div class="p-4 bg-gray-50 rounded">
+                    <h3 class="font-medium text-gray-700">Database Status</h3>
+                    <div id="db-status"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Engagement Stats -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-4">Engagement Statistics (Last 24h)</h2>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="p-4 bg-gray-50 rounded">
+                    <h3 class="font-medium text-gray-700">Total Engagements</h3>
+                    <p class="text-2xl font-bold" id="total-engagements"></p>
+                </div>
+                <div class="p-4 bg-gray-50 rounded">
+                    <h3 class="font-medium text-gray-700">Likes</h3>
+                    <p class="text-2xl font-bold" id="total-likes"></p>
+                </div>
+                <div class="p-4 bg-gray-50 rounded">
+                    <h3 class="font-medium text-gray-700">Retweets</h3>
+                    <p class="text-2xl font-bold" id="total-retweets"></p>
+                </div>
+                <div class="p-4 bg-gray-50 rounded">
+                    <h3 class="font-medium text-gray-700">Replies</h3>
+                    <p class="text-2xl font-bold" id="total-replies"></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Content Distribution -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-xl font-semibold mb-4">Content Type Distribution</h2>
+                <canvas id="content-chart"></canvas>
+            </div>
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-xl font-semibold mb-4">Sentiment Distribution</h2>
+                <canvas id="sentiment-chart"></canvas>
+            </div>
+        </div>
+
+        <!-- Weekly Summary -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h2 class="text-xl font-semibold mb-4">Weekly Summary</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="p-4 bg-gray-50 rounded">
+                    <h3 class="font-medium text-gray-700">Average Response Time</h3>
+                    <p class="text-2xl font-bold" id="avg-response-time"></p>
+                </div>
+                <div class="p-4 bg-gray-50 rounded">
+                    <h3 class="font-medium text-gray-700">Total Interactions</h3>
+                    <p class="text-2xl font-bold" id="total-interactions"></p>
+                </div>
+                <div class="p-4 bg-gray-50 rounded">
+                    <h3 class="font-medium text-gray-700">Engagement Rate</h3>
+                    <p class="text-2xl font-bold" id="engagement-rate"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Update timestamp
+        document.getElementById('last-updated').textContent = new Date().toLocaleString();
+
+        // Fetch and update dashboard data
+        async function updateDashboard() {
+            try {
+                const response = await fetch('/api/stats');
+                const data = await response.json();
+
+                // Update health status
+                document.getElementById('overall-status').textContent = data.health.overall_status;
+                document.getElementById('api-status').innerHTML = Object.entries(data.health.apis)
+                    .map(([api, status]) => `<p>${api}: ${status.status}</p>`)
+                    .join('');
+                document.getElementById('db-status').innerHTML = Object.entries(data.health.databases)
+                    .map(([db, status]) => `<p>${db}: ${status.status}</p>`)
+                    .join('');
+
+                // Update engagement stats
+                const engagement = data.engagement.engagements;
+                document.getElementById('total-engagements').textContent = engagement.total;
+                document.getElementById('total-likes').textContent = engagement.likes;
+                document.getElementById('total-retweets').textContent = engagement.retweets;
+                document.getElementById('total-replies').textContent = engagement.replies;
+
+                // Update content charts
+                const contentCtx = document.getElementById('content-chart').getContext('2d');
+                new Chart(contentCtx, {
+                    type: 'pie',
+                    data: {
+                        labels: Object.keys(data.content.content_types),
+                        datasets: [{
+                            data: Object.values(data.content.content_types),
+                            backgroundColor: [
+                                '#3B82F6', '#10B981', '#F59E0B', '#EF4444',
+                                '#8B5CF6', '#EC4899', '#14B8A6'
+                            ]
+                        }]
+                    }
+                });
+
+                const sentimentCtx = document.getElementById('sentiment-chart').getContext('2d');
+                new Chart(sentimentCtx, {
+                    type: 'pie',
+                    data: {
+                        labels: Object.keys(data.content.sentiments),
+                        datasets: [{
+                            data: Object.values(data.content.sentiments),
+                            backgroundColor: [
+                                '#10B981', '#3B82F6', '#9CA3AF', '#F59E0B', '#EF4444'
+                            ]
+                        }]
+                    }
+                });
+
+                // Update weekly summary
+                document.getElementById('avg-response-time').textContent = 
+                    `${data.weekly.avg_response_time} min`;
+                document.getElementById('total-interactions').textContent = 
+                    data.weekly.total_interactions;
+                document.getElementById('engagement-rate').textContent = 
+                    `${(data.weekly.engagement_rate * 100).toFixed(1)}%`;
+
+            } catch (error) {
+                console.error('Error updating dashboard:', error);
+            }
+        }
+
+        // Initial update
+        updateDashboard();
+
+        // Update every 5 minutes
+        setInterval(updateDashboard, 5 * 60 * 1000);
+    </script>
+</body>
+</html> 
