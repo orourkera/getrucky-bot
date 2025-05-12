@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 # post_single_tweet.py
 
-import logging
 import sys
+if len(sys.argv) > 1 and sys.argv[1] == "--check-rate-limit":
+    from api_client import check_rate_limit_status
+    check_rate_limit_status()
+    sys.exit(0)
+
+import logging
 sys.path.append('.')
 
 from api_client import initialize_xai_client, initialize_x_client, post_tweet

@@ -6,6 +6,7 @@ import logging
 import time
 from typing import Optional
 from config import X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRET, APP_API_TOKEN, XAI_API_KEY, get_config
+import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -346,4 +347,28 @@ def generate_text(headers, prompt, max_length=280):
         return generated_text
     except requests.exceptions.RequestException as e:
         logger.error(f"Error generating text with xAI API: {e}")
-        return "" 
+        return ""
+
+def check_rate_limit_status():
+    """Check and log the current Twitter/X API rate limit status for the authenticated user."""
+    auth = requests.auth.OAuth1(
+        X_API_KEY,
+        X_API_SECRET,
+        X_ACCESS_TOKEN,
+        X_ACCESS_TOKEN_SECRET
+    )
+    url = "https://api.twitter.com/1.1/application/rate_limit_status.json"
+    try:
+        response = requests.get(url, auth=auth)
+        response.raise_for_status()
+        data = response.json()
+        resources = data.get('resources', {})
+        logger.info("Current Twitter/X API Rate Limits:")
+        for category, endpoints in resources.items():
+            for endpoint, limits in endpoints.items():
+                reset_time = datetime.datetime.utcfromtimestamp(limits['reset']).strftime('%Y-%m-%d %H:%M:%S UTC')
+                logger.info(f"{endpoint}: {limits['remaining']} remaining (limit {limits['limit']}), resets at {reset_time}")
+        return resources
+    except Exception as e:
+        logger.error(f"Error checking rate limit status: {e}")
+        return None 
