@@ -38,7 +38,7 @@ def initialize_clients():
     try:
         # Initialize API clients with retries
         logger.info("Initializing API clients")
-        x_client = api_client.initialize_x_client(max_retries=5, retry_delay=10)
+        x_client = api_client.initialize_x_client(max_retries=5, retry_delay=10, verify=False)
         app_client = api_client.initialize_app_client()
         xai_client = api_client.initialize_xai_client()
         
