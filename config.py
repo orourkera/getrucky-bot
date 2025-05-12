@@ -4,6 +4,13 @@ import os
 import logging
 from typing import Any, Dict, Optional
 import random
+from datetime import datetime, timedelta, time
+try:
+    from zoneinfo import ZoneInfo  # Python 3.9+
+    TZ = ZoneInfo("America/New_York")
+except ImportError:
+    import pytz
+    TZ = pytz.timezone("America/New_York")
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +40,30 @@ PAPERTRAIL_API_TOKEN = os.getenv('PAPERTRAIL_API_TOKEN', '')
 POST_FREQUENCY = range(5, 11)  # 5-10 posts per day
 SEARCH_TERMS = ["ruck", "rucking", "#rucking", "#rucklife"]
 MAX_REPLIES = 50  # Max replies per hour
-# Removed 8:00 UTC (4AM EDT), added 23:00 and 1:00 UTC (7PM and 9PM EDT)
-POST_TIMES = [(10, random.randint(15, 45)), (12, random.randint(5, 25)), (15, random.randint(10, 50)), 
-              (18, random.randint(5, 30)), (21, random.randint(20, 55)), (23, random.randint(5, 40)), (1, random.randint(15, 35))]
+
+def get_post_times():
+    """
+    Generate a list of (hour, minute) tuples in UTC for randomized post times
+    between 6am and 9pm US Eastern Time (ET) for today.
+    """
+    num_posts = random.choice(POST_FREQUENCY)
+    # ET hours: 6am to 9pm inclusive
+    et_hours = list(range(6, 22))  # 6 to 21
+    # Randomly select hours for today
+    selected_hours = random.sample(et_hours, k=num_posts)
+    post_times_utc = []
+    today = datetime.now(TZ).date()
+    for hour in selected_hours:
+        minute = random.randint(0, 59)
+        # Create ET datetime
+        et_dt = datetime.combine(today, time(hour, minute), tzinfo=TZ)
+        # Convert to UTC
+        utc_dt = et_dt.astimezone(ZoneInfo("UTC")) if hasattr(et_dt, 'astimezone') else et_dt.astimezone(pytz.utc)
+        post_times_utc.append((utc_dt.hour, utc_dt.minute))
+    # Sort by time
+    post_times_utc.sort()
+    return post_times_utc
+
 WEEKLY_THEMES = {
     0: "Motivation Monday",
     1: "Ruck Tips Tuesday",

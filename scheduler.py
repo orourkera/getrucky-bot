@@ -5,7 +5,7 @@ import logging
 from datetime import datetime, time
 import content_generator
 import api_client
-from config import POST_TIMES, POST_FREQUENCY
+from config import get_post_times, POST_FREQUENCY
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +14,7 @@ def schedule_posts(scheduler, x_client, app_client, xai_headers):
     """Schedule regular and session-based posts for the day."""
     try:
         num_posts = random.choice(POST_FREQUENCY)  # Randomly select number of posts (5-10)
-        selected_times = POST_TIMES[:num_posts] if num_posts <= len(POST_TIMES) else POST_TIMES
+        selected_times = get_post_times()[:num_posts]
         
         # Schedule regular content posts (3-8)
         regular_posts = max(3, num_posts - 2)  # Ensure at least 3 regular posts, reserve 2 for session posts if possible
