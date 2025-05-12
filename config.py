@@ -3,6 +3,7 @@
 import os
 import logging
 from typing import Any, Dict, Optional
+import random
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,9 @@ PAPERTRAIL_API_TOKEN = os.getenv('PAPERTRAIL_API_TOKEN', '')
 POST_FREQUENCY = range(5, 11)  # 5-10 posts per day
 SEARCH_TERMS = ["ruck", "rucking", "#rucking", "#rucklife"]
 MAX_REPLIES = 50  # Max replies per hour
-POST_TIMES = [8, 10, 12, 15, 18, 21]  # UTC hours for posting
+# Removed 8:00 UTC (4AM EDT), added 23:00 and 1:00 UTC (7PM and 9PM EDT)
+POST_TIMES = [(10, random.randint(15, 45)), (12, random.randint(5, 25)), (15, random.randint(10, 50)), 
+              (18, random.randint(5, 30)), (21, random.randint(20, 55)), (23, random.randint(5, 40)), (1, random.randint(15, 35))]
 WEEKLY_THEMES = {
     0: "Motivation Monday",
     1: "Ruck Tips Tuesday",
