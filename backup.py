@@ -105,6 +105,10 @@ def restore_db(db_name):
 def initialize_databases():
     """Initialize SQLite databases with schemas if they don't exist."""
     try:
+        # Ensure /tmp directory exists and has proper permissions
+        os.makedirs('/tmp', exist_ok=True)
+        os.chmod('/tmp', 0o777)  # Full permissions for Heroku ephemeral filesystem
+        
         # Pun Library DB
         conn = sqlite3.connect(DB_FILES['pun_library'])
         conn.execute("""
@@ -127,7 +131,8 @@ def initialize_databases():
                 reply_text TEXT,
                 sentiment TEXT,
                 content_type TEXT,
-                timestamp TIMESTAMP
+                timestamp TIMESTAMP,
+                mention_timestamp TEXT
             )
         """)
         conn.commit()
