@@ -29,8 +29,8 @@ def check_database_health():
         try:
             if not os.path.exists(db_path):
                 health_status[db_name] = {
-                    'status': 'error',
-                    'message': f'Database file not found: {db_path}'
+                    'status': 'initializing',
+                    'message': f'Database not created yet'
                 }
                 continue
             
@@ -39,33 +39,61 @@ def check_database_health():
             
             # Check if database is accessible and has expected tables
             if db_name == 'interaction_log':
-                cursor.execute("SELECT COUNT(*) FROM logs WHERE timestamp > datetime('now', '-1 hour')")
-                recent_interactions = cursor.fetchone()[0]
-                health_status[db_name] = {
-                    'status': 'healthy',
-                    'recent_interactions': recent_interactions
-                }
+                try:
+                    cursor.execute("SELECT COUNT(*) FROM logs WHERE timestamp > datetime('now', '-1 hour')")
+                    recent_interactions = cursor.fetchone()[0]
+                    health_status[db_name] = {
+                        'status': 'healthy',
+                        'recent_interactions': recent_interactions
+                    }
+                except sqlite3.OperationalError:
+                    # Table doesn't exist yet
+                    health_status[db_name] = {
+                        'status': 'initializing',
+                        'message': 'Database created but tables not initialized yet'
+                    }
             elif db_name == 'analytics':
-                cursor.execute("SELECT COUNT(*) FROM metrics WHERE timestamp > datetime('now', '-1 hour')")
-                recent_metrics = cursor.fetchone()[0]
-                health_status[db_name] = {
-                    'status': 'healthy',
-                    'recent_metrics': recent_metrics
-                }
+                try:
+                    cursor.execute("SELECT COUNT(*) FROM metrics WHERE timestamp > datetime('now', '-1 hour')")
+                    recent_metrics = cursor.fetchone()[0]
+                    health_status[db_name] = {
+                        'status': 'healthy',
+                        'recent_metrics': recent_metrics
+                    }
+                except sqlite3.OperationalError:
+                    # Table doesn't exist yet
+                    health_status[db_name] = {
+                        'status': 'initializing',
+                        'message': 'Database created but tables not initialized yet'
+                    }
             elif db_name == 'model_cache':
-                cursor.execute("SELECT COUNT(*) FROM cache WHERE timestamp > datetime('now', '-1 hour')")
-                recent_cache = cursor.fetchone()[0]
-                health_status[db_name] = {
-                    'status': 'healthy',
-                    'recent_cache_entries': recent_cache
-                }
+                try:
+                    cursor.execute("SELECT COUNT(*) FROM cache WHERE timestamp > datetime('now', '-1 hour')")
+                    recent_cache = cursor.fetchone()[0]
+                    health_status[db_name] = {
+                        'status': 'healthy',
+                        'recent_cache_entries': recent_cache
+                    }
+                except sqlite3.OperationalError:
+                    # Table doesn't exist yet
+                    health_status[db_name] = {
+                        'status': 'initializing',
+                        'message': 'Database created but tables not initialized yet'
+                    }
             elif db_name == 'pun_library':
-                cursor.execute("SELECT COUNT(*) FROM templates")
-                total_templates = cursor.fetchone()[0]
-                health_status[db_name] = {
-                    'status': 'healthy',
-                    'total_templates': total_templates
-                }
+                try:
+                    cursor.execute("SELECT COUNT(*) FROM templates")
+                    total_templates = cursor.fetchone()[0]
+                    health_status[db_name] = {
+                        'status': 'healthy',
+                        'total_templates': total_templates
+                    }
+                except sqlite3.OperationalError:
+                    # Table doesn't exist yet
+                    health_status[db_name] = {
+                        'status': 'initializing',
+                        'message': 'Database created but tables not initialized yet'
+                    }
             
             conn.close()
         except Exception as e:
@@ -80,15 +108,38 @@ def check_api_health(x_client):
     """Check the health of external APIs."""
     api_status = {}
     
-    # Check X API
+    # Check X API - safely handle non-verifying clients
     try:
-        # Try to get user profile
-        user = x_client.get_me()
-        api_status['x_api'] = {
-            'status': 'healthy',
-            'username': user.screen_name,
-            'followers': user.followers_count
-        }
+        # Check if the client has wait_on_rate_limit set to False
+        # If so, don't make API calls that might rate limit
+        client_has_rate_limit = getattr(x_client, '_wait_on_rate_limit', True)
+        
+        if not client_has_rate_limit:
+            # For dashboard clients, just report status without checking
+            api_status['x_api'] = {
+                'status': 'unknown',
+                'message': 'Client initialized with wait_on_rate_limit=False, skipping health check'
+            }
+        else:
+            # Try to get user profile - only for clients set to wait on rate limit
+            try:
+                user = x_client.get_me()
+                if hasattr(user, 'data') and user.data:
+                    api_status['x_api'] = {
+                        'status': 'healthy',
+                        'username': user.data.username,
+                        'id': user.data.id
+                    }
+                else:
+                    api_status['x_api'] = {
+                        'status': 'error',
+                        'message': 'Could not fetch user data'
+                    }
+            except Exception as x_error:
+                api_status['x_api'] = {
+                    'status': 'error',
+                    'message': str(x_error)
+                }
     except Exception as e:
         api_status['x_api'] = {
             'status': 'error',
@@ -157,15 +208,31 @@ def get_health_status(x_client):
         }
         
         # Determine overall status
-        all_healthy = all(
-            db['status'] == 'healthy' 
-            for db in health_status['databases'].values()
-        ) and all(
-            api['status'] == 'healthy' 
-            for api in health_status['apis'].values()
-        )
+        # Count status types
+        status_counts = {'healthy': 0, 'initializing': 0, 'error': 0, 'unknown': 0}
         
-        health_status['overall_status'] = 'healthy' if all_healthy else 'degraded'
+        # Count database statuses
+        for db in health_status['databases'].values():
+            status_counts[db['status']] = status_counts.get(db['status'], 0) + 1
+            
+        # Count API statuses
+        for api in health_status['apis'].values():
+            status_counts[api['status']] = status_counts.get(api['status'], 0) + 1
+        
+        # Determine overall status
+        if status_counts['error'] > 0:
+            if status_counts['healthy'] > 0:
+                overall_status = 'degraded'
+            else:
+                overall_status = 'error'
+        elif status_counts['initializing'] > 0:
+            overall_status = 'initializing'
+        elif status_counts['unknown'] > 0 and status_counts['healthy'] > 0:
+            overall_status = 'healthy'  # Dashboard mode is fine
+        else:
+            overall_status = 'healthy'
+        
+        health_status['overall_status'] = overall_status
         
         return health_status
     except Exception as e:
