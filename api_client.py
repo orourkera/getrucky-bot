@@ -378,10 +378,10 @@ def generate_text(headers, prompt, max_length=280):
 def check_rate_limit_status():
     """Check and log the current Twitter/X API rate limit status for the authenticated user."""
     auth = requests.auth.OAuth1(
-        X_API_KEY,
-        X_API_SECRET,
-        X_ACCESS_TOKEN,
-        X_ACCESS_TOKEN_SECRET
+        os.getenv('TWITTER_API_KEY'),
+        os.getenv('TWITTER_API_SECRET'),
+        os.getenv('TWITTER_ACCESS_TOKEN'),
+        os.getenv('TWITTER_ACCESS_TOKEN_SECRET')
     )
     url = "https://api.twitter.com/1.1/application/rate_limit_status.json"
     try:
@@ -397,4 +397,22 @@ def check_rate_limit_status():
         return resources
     except Exception as e:
         logger.error(f"Error checking rate limit status: {e}")
-        return None 
+        return None
+
+# Make the function available at module level
+__all__ = [
+    'initialize_x_client',
+    'initialize_readonly_client',
+    'post_tweet',
+    'reply_to_tweet',
+    'like_tweet',
+    'retweet',
+    'search_tweets',
+    'get_user_followers',
+    'initialize_app_client',
+    'get_ruck_sessions',
+    'get_session_details',
+    'initialize_xai_client',
+    'generate_text',
+    'check_rate_limit_status'  # Add this to exports
+] 
