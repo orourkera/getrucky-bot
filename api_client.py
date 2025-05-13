@@ -11,6 +11,13 @@ import os
 
 logger = logging.getLogger(__name__)
 
+# Cache for client verification
+_client_verification_cache = {
+    'timestamp': 0,
+    'client': None,
+    'username': None
+}
+
 def validate_oauth_credentials():
     """Validate that OAuth 1.0a credentials are in the correct format."""
     if not all([X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRET]):
@@ -34,7 +41,15 @@ def validate_oauth_credentials():
 
 # X API Client
 def initialize_x_client(max_retries=3, retry_delay=5, verify=True):
-    """Initialize X API client with rate limit tracking."""
+    """Initialize X API client with rate limit tracking and verification caching."""
+    global _client_verification_cache
+    
+    # Check if we have a cached client that's less than 10 minutes old
+    current_time = time.time()
+    if _client_verification_cache['client'] and (current_time - _client_verification_cache['timestamp']) < 600:
+        logger.info(f"Using cached client for @{_client_verification_cache['username']}")
+        return _client_verification_cache['client']
+    
     try:
         logger.info("Initializing X client (attempt 1/3)")
         client = tweepy.Client(
@@ -46,13 +61,28 @@ def initialize_x_client(max_retries=3, retry_delay=5, verify=True):
             wait_on_rate_limit=True
         )
         
-        # Verify credentials by fetching user info
-        logger.info("Verifying OAuth 1.0a credentials by fetching user info")
-        user = client.get_me()
-        if not user.data:
-            raise Exception("Failed to verify credentials")
+        # Only verify if requested and cache is expired
+        if verify:
+            logger.info("Verifying OAuth 1.0a credentials by fetching user info")
+            try:
+                user = client.get_me()
+                if not user.data:
+                    raise Exception("Failed to verify credentials")
+                
+                # Cache the verified client
+                _client_verification_cache = {
+                    'timestamp': current_time,
+                    'client': client,
+                    'username': user.data.username
+                }
+                logger.info(f"Successfully authenticated as @{user.data.username}")
+            except tweepy.errors.TooManyRequests as e:
+                logger.warning(f"Rate limit hit during verification: {e}")
+                # If we hit rate limit, use the client anyway but don't cache it
+                return client
+        else:
+            logger.info("Skipping client verification as requested")
             
-        logger.info(f"Successfully authenticated as @{user.data.username}")
         return client
     except Exception as e:
         logger.error(f"Failed to initialize X client: {e}")
@@ -90,11 +120,18 @@ def log_rate_limits(response):
         'reset': headers.get('x-rate-limit-reset', 'N/A')
     }
     
+    # Convert reset timestamp to human-readable time
+    if rate_limit_info['reset'] != 'N/A':
+        reset_time = datetime.datetime.utcfromtimestamp(int(rate_limit_info['reset']))
+        rate_limit_info['reset_time'] = reset_time.strftime('%Y-%m-%d %H:%M:%S UTC')
+    
     logger.info(f"Rate Limit Status: {rate_limit_info}")
     
     # If we're close to the limit, log a warning
-    if rate_limit_info['remaining'] != 'N/A' and int(rate_limit_info['remaining']) < 10:
-        logger.warning(f"Rate limit nearly exceeded! {rate_limit_info['remaining']} calls remaining")
+    if rate_limit_info['remaining'] != 'N/A':
+        remaining = int(rate_limit_info['remaining'])
+        if remaining < 10:
+            logger.warning(f"Rate limit nearly exceeded! {remaining} calls remaining, resets at {rate_limit_info.get('reset_time', 'N/A')}")
 
 def post_tweet(client, text, media=None, max_retries=2):
     """Post a tweet with optional media using v2 API."""
