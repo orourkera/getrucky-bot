@@ -7,6 +7,7 @@ import time
 from typing import Optional
 from config import X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRET, APP_API_TOKEN, XAI_API_KEY, get_config
 import datetime
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -32,68 +33,34 @@ def validate_oauth_credentials():
         raise ValueError("Invalid Access Token Secret format")
 
 # X API Client
-def initialize_x_client(max_retries=3, retry_delay=5, verify: Optional[bool] = False, wait_on_rate_limit: bool = True):
-    """Initialize and return X API client with OAuth 1.0a authentication using v2 API."""
-    for attempt in range(max_retries):
-        try:
-            # Validate credentials first
-            validate_oauth_credentials()
+def initialize_x_client(max_retries=3, retry_delay=5, verify=True):
+    """Initialize X API client with rate limit tracking."""
+    try:
+        logger.info("Initializing X client (attempt 1/3)")
+        client = tweepy.Client(
+            bearer_token=os.getenv('TWITTER_BEARER_TOKEN'),
+            consumer_key=os.getenv('TWITTER_API_KEY'),
+            consumer_secret=os.getenv('TWITTER_API_SECRET'),
+            access_token=os.getenv('TWITTER_ACCESS_TOKEN'),
+            access_token_secret=os.getenv('TWITTER_ACCESS_SECRET'),
+            wait_on_rate_limit=True
+        )
+        
+        # Verify credentials by fetching user info
+        logger.info("Verifying OAuth 1.0a credentials by fetching user info")
+        user = client.get_me()
+        if not user.data:
+            raise Exception("Failed to verify credentials")
             
-            logger.info(f"Initializing X client (attempt {attempt + 1}/{max_retries})")
-            
-            # Initialize with OAuth 1.0a for full access
-            client = tweepy.Client(
-                consumer_key=X_API_KEY,
-                consumer_secret=X_API_SECRET,
-                access_token=X_ACCESS_TOKEN,
-                access_token_secret=X_ACCESS_TOKEN_SECRET,
-                wait_on_rate_limit=wait_on_rate_limit
-            )
-            
-            # Optionally verify credentials
-            if verify:
-                try:
-                    logger.info("Verifying OAuth 1.0a credentials by fetching user info")
-                    me = client.get_me()
-                    if me and hasattr(me, 'data') and me.data:
-                        logger.info(f"X API client initialized successfully with OAuth 1.0a for user @{me.data.username} (ID: {me.data.id})")
-                        return client
-                    else:
-                        logger.warning("Failed to get user info during client verification - empty response")
-                        raise Exception("Failed to get user info - empty response")
-                        
-                except tweepy.errors.Unauthorized as unauth_error:
-                    logger.error(f"Unauthorized error during client verification: {unauth_error}")
-                    if hasattr(unauth_error, 'response') and unauth_error.response is not None:
-                        logger.error(f"Response: {unauth_error.response.status_code} - {unauth_error.response.text}")
-                    raise
-                except tweepy.errors.TooManyRequests as rate_error:
-                    logger.warning(f"Rate limit hit during client verification: {rate_error}")
-                    # Don't fail completely, just wait and retry
-                    time.sleep(retry_delay * (attempt + 1))
-                    continue
-                except Exception as verify_error:
-                    logger.error(f"Error verifying client credentials: {verify_error}")
-                    if hasattr(verify_error, 'response') and verify_error.response is not None:
-                        logger.error(f"Response: {verify_error.response.status_code} - {verify_error.response.text}")
-                    raise
-                # end verify block
-            else:
-                # No verification requested
-                logger.info("X API client created without credential verification (verify=False)")
-                return client
-                
-        except Exception as e:
-            logger.error(f"Failed to initialize X API client on attempt {attempt + 1}/{max_retries}: {e}")
-            if attempt < max_retries - 1:
-                logger.info(f"Retrying in {retry_delay} seconds...")
-                time.sleep(retry_delay)
-            else:
-                logger.error("All attempts to initialize X API client failed")
-                raise
-    
-    # If we get here, all attempts failed
-    raise Exception(f"Failed to initialize X API client after {max_retries} attempts")
+        logger.info(f"Successfully authenticated as @{user.data.username}")
+        return client
+    except Exception as e:
+        logger.error(f"Failed to initialize X client: {e}")
+        if max_retries > 0:
+            logger.info(f"Retrying in {retry_delay} seconds...")
+            time.sleep(retry_delay)
+            return initialize_x_client(max_retries - 1, retry_delay * 2, verify)
+        raise
 
 def initialize_readonly_client():
     """Initialize and return a read-only X API client using Bearer token."""
@@ -111,6 +78,24 @@ def initialize_readonly_client():
         logger.error(f"Failed to initialize read-only X API client: {e}")
         return None
 
+def log_rate_limits(response):
+    """Log rate limit information from response headers."""
+    if not hasattr(response, 'headers'):
+        return
+        
+    headers = response.headers
+    rate_limit_info = {
+        'limit': headers.get('x-rate-limit-limit', 'N/A'),
+        'remaining': headers.get('x-rate-limit-remaining', 'N/A'),
+        'reset': headers.get('x-rate-limit-reset', 'N/A')
+    }
+    
+    logger.info(f"Rate Limit Status: {rate_limit_info}")
+    
+    # If we're close to the limit, log a warning
+    if rate_limit_info['remaining'] != 'N/A' and int(rate_limit_info['remaining']) < 10:
+        logger.warning(f"Rate limit nearly exceeded! {rate_limit_info['remaining']} calls remaining")
+
 def post_tweet(client, text, media=None, max_retries=2):
     """Post a tweet with optional media using v2 API."""
     for attempt in range(max_retries + 1):
@@ -125,6 +110,7 @@ def post_tweet(client, text, media=None, max_retries=2):
                 result = client.create_tweet(text=text, media_ids=[media_id])
             else:
                 result = client.create_tweet(text=text)
+            log_rate_limits(result)
             logger.info(f"Posted tweet: {text[:50]}...")
             return result.data['id']
         except tweepy.errors.Unauthorized as unauth:
@@ -230,13 +216,18 @@ def retweet(client, tweet_id, max_retries=2):
                 return False
 
 def search_tweets(client, query, min_likes=10):
-    """Search recent tweets for a query, filter by minimum likes using public_metrics from the search response."""
+    """Search recent tweets with rate limit tracking."""
     try:
         logger.info(f"API CALL: search_recent_tweets for query '{query}'")
-        tweets = client.search_recent_tweets(query=query, max_results=100, tweet_fields=['public_metrics'])
-        if not tweets.data:
+        response = client.search_recent_tweets(query=query, max_results=100, tweet_fields=['public_metrics'])
+        log_rate_limits(response)
+        
+        if not response.data:
             return []
-        filtered_tweets = [tweet for tweet in tweets.data if hasattr(tweet, 'public_metrics') and tweet.public_metrics.get('like_count', 0) >= min_likes]
+            
+        filtered_tweets = [tweet for tweet in response.data 
+                          if hasattr(tweet, 'public_metrics') 
+                          and tweet.public_metrics.get('like_count', 0) >= min_likes]
         logger.info(f"Searched for '{query}': found {len(filtered_tweets)} tweets with >= {min_likes} likes")
         return filtered_tweets
     except Exception as e:
@@ -246,18 +237,22 @@ def search_tweets(client, query, min_likes=10):
 # Simple in-memory cache for user followers (per process run)
 _user_followers_cache = {}
 def get_user_followers(client, username):
-    """Fetch follower count for a user, with in-memory cache to avoid repeated lookups."""
+    """Fetch follower count with rate limit tracking."""
     try:
         if username in _user_followers_cache:
             logger.info(f"Cache HIT for followers of {username}")
             return _user_followers_cache[username]
+            
         logger.info(f"API CALL: get_user for username '{username}'")
         readonly_client = initialize_readonly_client()
         search_client = readonly_client if readonly_client else client
-        user = search_client.get_user(username=username, user_fields=['public_metrics'])
-        if not user.data:
+        response = search_client.get_user(username=username, user_fields=['public_metrics'])
+        log_rate_limits(response)
+        
+        if not response.data:
             return 0
-        follower_count = user.data.public_metrics['followers_count']
+            
+        follower_count = response.data.public_metrics['followers_count']
         _user_followers_cache[username] = follower_count
         logger.info(f"Fetched follower count for {username}: {follower_count}")
         return follower_count
