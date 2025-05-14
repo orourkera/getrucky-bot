@@ -77,6 +77,20 @@ def restore_db(db_name):
         conn = psycopg2.connect(DATABASE_URL)
         cur = conn.cursor()
         
+        # Create backups table if it doesn't exist
+        try:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS backups (
+                    db_name TEXT,
+                    data BYTEA,
+                    timestamp TIMESTAMP
+                )
+            """)
+            conn.commit()
+        except Exception as table_error:
+            logger.error(f"Error creating backups table: {table_error}")
+            # Continue since we're just trying to restore
+        
         # Fetch the latest backup for the specified database
         cur.execute("""
             SELECT data FROM backups
@@ -104,84 +118,103 @@ def restore_db(db_name):
 
 def initialize_databases():
     """Initialize SQLite databases with schemas if they don't exist."""
+    success = True
     try:
         # Ensure /tmp directory exists and has proper permissions
         os.makedirs('/tmp', exist_ok=True)
         os.chmod('/tmp', 0o777)  # Full permissions for Heroku ephemeral filesystem
         
         # Pun Library DB
-        conn = sqlite3.connect(DB_FILES['pun_library'])
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS templates (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                text TEXT NOT NULL,
-                type TEXT NOT NULL,
-                category TEXT NOT NULL
-            )
-        """)
-        conn.commit()
-        conn.close()
-        logger.info("Initialized pun_library.db")
+        try:
+            conn = sqlite3.connect(DB_FILES['pun_library'])
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS templates (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    text TEXT NOT NULL,
+                    type TEXT NOT NULL,
+                    category TEXT NOT NULL
+                )
+            """)
+            conn.commit()
+            conn.close()
+            logger.info("Initialized pun_library.db")
+        except Exception as e:
+            logger.error(f"Error initializing pun_library.db: {e}")
+            success = False
         
         # Interaction Log DB
-        conn = sqlite3.connect(DB_FILES['interaction_log'])
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS logs (
-                tweet_id TEXT PRIMARY KEY,
-                reply_text TEXT,
-                sentiment TEXT,
-                content_type TEXT,
-                timestamp TIMESTAMP,
-                mention_timestamp TEXT
-            )
-        """)
-        conn.commit()
-        conn.close()
-        logger.info("Initialized interaction_log.db")
+        try:
+            conn = sqlite3.connect(DB_FILES['interaction_log'])
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS logs (
+                    tweet_id TEXT PRIMARY KEY,
+                    reply_text TEXT,
+                    sentiment TEXT,
+                    content_type TEXT,
+                    timestamp TIMESTAMP,
+                    mention_timestamp TEXT,
+                    reply_to_tweet_id TEXT,
+                    user_handle TEXT
+                )
+            """)
+            conn.commit()
+            conn.close()
+            logger.info("Initialized interaction_log.db")
+        except Exception as e:
+            logger.error(f"Error initializing interaction_log.db: {e}")
+            success = False
         
         # Analytics DB
-        conn = sqlite3.connect(DB_FILES['analytics'])
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS metrics (
-                post_id TEXT PRIMARY KEY,
-                likes INTEGER,
-                retweets INTEGER,
-                replies INTEGER,
-                timestamp TIMESTAMP
-            )
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS engagement (
-                tweet_id TEXT,
-                action TEXT,
-                timestamp TIMESTAMP
-            )
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS flags (
-                text TEXT,
-                reason TEXT,
-                timestamp TIMESTAMP
-            )
-        """)
-        conn.commit()
-        conn.close()
-        logger.info("Initialized analytics.db")
+        try:
+            conn = sqlite3.connect(DB_FILES['analytics'])
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS metrics (
+                    post_id TEXT PRIMARY KEY,
+                    likes INTEGER,
+                    retweets INTEGER,
+                    replies INTEGER,
+                    timestamp TIMESTAMP
+                )
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS engagement (
+                    tweet_id TEXT,
+                    action TEXT,
+                    timestamp TIMESTAMP
+                )
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS flags (
+                    text TEXT,
+                    reason TEXT,
+                    timestamp TIMESTAMP
+                )
+            """)
+            conn.commit()
+            conn.close()
+            logger.info("Initialized analytics.db")
+        except Exception as e:
+            logger.error(f"Error initializing analytics.db: {e}")
+            success = False
         
         # Model Cache DB
-        conn = sqlite3.connect(DB_FILES['model_cache'])
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS cache (
-                prompt TEXT PRIMARY KEY,
-                response TEXT,
-                timestamp TIMESTAMP
-            )
-        """)
-        conn.commit()
-        conn.close()
-        logger.info("Initialized model_cache.db")
+        try:
+            conn = sqlite3.connect(DB_FILES['model_cache'])
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS cache (
+                    prompt TEXT PRIMARY KEY,
+                    response TEXT,
+                    timestamp TIMESTAMP
+                )
+            """)
+            conn.commit()
+            conn.close()
+            logger.info("Initialized model_cache.db")
+        except Exception as e:
+            logger.error(f"Error initializing model_cache.db: {e}")
+            success = False
         
-        return True
+        return success
     except Exception as e:
-        logger.error(f"Error initializing databases: {e}")
+        logger.error(f"Fatal error initializing databases: {e}")
         return False 
