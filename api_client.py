@@ -6,7 +6,7 @@ from requests_oauthlib import OAuth1
 import logging
 import time
 from typing import Optional
-from config import X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRET, APP_API_TOKEN, XAI_API_KEY, get_config
+from config import X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRET, APP_API_TOKEN, XAI_API_KEY, get_config, X_BEARER_TOKEN
 import datetime
 import os
 
@@ -54,11 +54,11 @@ def initialize_x_client(max_retries=3, retry_delay=5, verify=True):
     try:
         logger.info("Initializing X client (attempt 1/3)")
         client = tweepy.Client(
-            bearer_token=os.getenv('TWITTER_BEARER_TOKEN'),
-            consumer_key=os.getenv('TWITTER_API_KEY'),
-            consumer_secret=os.getenv('TWITTER_API_SECRET'),
-            access_token=os.getenv('TWITTER_ACCESS_TOKEN'),
-            access_token_secret=os.getenv('TWITTER_ACCESS_SECRET'),
+            bearer_token=X_BEARER_TOKEN,
+            consumer_key=X_API_KEY,
+            consumer_secret=X_API_SECRET,
+            access_token=X_ACCESS_TOKEN,
+            access_token_secret=X_ACCESS_TOKEN_SECRET,
             wait_on_rate_limit=True
         )
         
