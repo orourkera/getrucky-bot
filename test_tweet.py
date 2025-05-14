@@ -11,8 +11,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 def main():
-    """Test posting a single tweet using the v2 API directly."""
-    logger.info("Starting direct X API v2 test")
+    """Test posting a single tweet using OAuth 1.0a authentication."""
+    logger.info("Starting OAuth 1.0a authentication test")
     
     try:
         # Get credentials from environment variables
@@ -25,17 +25,18 @@ def main():
         logger.info(f"Consumer Key: {consumer_key[:5]}...{consumer_key[-5:]}")
         logger.info(f"Access Token: {access_token[:5]}...{access_token[-5:]}")
         
-        # Create OAuth1 session
+        # Create OAuth1 session with callback URL
         oauth = OAuth1Session(
             client_key=consumer_key,
             client_secret=consumer_secret,
             resource_owner_key=access_token,
-            resource_owner_secret=access_token_secret
+            resource_owner_secret=access_token_secret,
+            callback_uri="https://getrucky-bot-b96897faaefd.herokuapp.com/"
         )
         
         # Post tweet using v2 API
         url = "https://api.twitter.com/2/tweets"
-        payload = {"text": "Testing the X API v2 with direct OAuth! Ruck it Up with @getrucky! 🥾 #GetRucky"}
+        payload = {"text": "Testing the X API with OAuth 1.0a! Ruck it Up with @getrucky! 🥾 #GetRucky"}
         
         response = oauth.post(url, json=payload)
         
@@ -47,7 +48,7 @@ def main():
             logger.error(f"Failed to post tweet. Status code: {response.status_code}, Response: {response.text}")
             return False
     except Exception as e:
-        logger.error(f"Error in direct v2 API test: {e}")
+        logger.error(f"Error in OAuth 1.0a test: {e}")
         return False
 
 if __name__ == "__main__":

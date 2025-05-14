@@ -113,6 +113,23 @@ def summarize_interactions(days=7):
                 content_type = interaction['content_type']
                 content_types[content_type] = content_types.get(content_type, 0) + 1
             summary['content_types'] = content_types
+            
+            # Calculate average response time
+            response_times = []
+            for interaction in interactions:
+                if interaction.get('mention_timestamp') and interaction.get('timestamp'):
+                    try:
+                        mention_time = datetime.fromisoformat(interaction['mention_timestamp'].replace('Z', '+00:00'))
+                        response_time = datetime.fromisoformat(interaction['timestamp'].replace('Z', '+00:00'))
+                        time_diff = (response_time - mention_time).total_seconds()
+                        if time_diff >= 0:  # Ensure response time is after mention time
+                            response_times.append(time_diff)
+                    except (ValueError, TypeError):
+                        logger.warning(f"Invalid timestamp format for interaction {interaction['tweet_id']}")
+            if response_times:
+                summary['avg_response_time'] = sum(response_times) / len(response_times) / 60  # Convert to minutes
+            else:
+                summary['avg_response_time'] = 0
         
         # Get engagement metrics from analytics.db
         metrics = get_metrics(start_date)
@@ -129,9 +146,6 @@ def summarize_interactions(days=7):
             for action in ['like', 'retweet', 'comment']:
                 summary['engagement_actions'][action + 's'] = sum(1 for a in engagement_actions if a['action'] == action)
         
-        # Calculate average response time (not implemented as we don't track initial mention time)
-        # Would require additional tracking of mention time and response time
-        
         logger.info(f"Generated interaction summary for the past {days} days")
         return summary
     except Exception as e:
@@ -145,7 +159,7 @@ def get_interactions(start_date):
         cursor = conn.cursor()
         
         cursor.execute("""
-            SELECT tweet_id, reply_text, sentiment, content_type, timestamp
+            SELECT tweet_id, reply_text, sentiment, content_type, timestamp, mention_timestamp
             FROM logs
             WHERE timestamp > ?
             ORDER BY timestamp DESC
@@ -158,7 +172,8 @@ def get_interactions(start_date):
                 'reply_text': row[1],
                 'sentiment': row[2],
                 'content_type': row[3],
-                'timestamp': row[4]
+                'timestamp': row[4],
+                'mention_timestamp': row[5]
             })
         
         conn.close()
@@ -222,6 +237,25 @@ def get_engagement_actions(start_date):
     except Exception as e:
         logger.error(f"Error retrieving engagement actions: {e}")
         return []
+
+def store_engagement_action(tweet_id, action):
+    """Store an engagement action in analytics.db."""
+    try:
+        conn = sqlite3.connect(ANALYTICS_DB)
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            INSERT INTO engagement (tweet_id, action, timestamp)
+            VALUES (?, ?, ?)
+        """, (str(tweet_id), action, datetime.utcnow().isoformat()))
+        
+        conn.commit()
+        conn.close()
+        logger.debug(f"Stored engagement action {action} for tweet {tweet_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Error storing engagement action for tweet {tweet_id}: {e}")
+        return False
 
 def log_weekly_summary():
     """Generate and log a weekly summary of interactions and engagement."""

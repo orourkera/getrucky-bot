@@ -88,7 +88,7 @@ The bot will:
 - [x] Define schema: `templates (id INTEGER PRIMARY KEY, text TEXT, type TEXT, category TEXT)`.
   - `type`: `"post"`, `"reply"`, `"cross-post"`.
   - `category`: `"pun"`, `"challenge"`, `"theme"`, `"poll"`, `"meme"`, `"shoutout"`, `"ugc"`.
-- [ ] Populate with 100+ templates (15-20 per category):
+- [x] Populate `pun_library.db` with 100 templates (15-20 per category):
   - Pun: "Ruck it Up with a {distance}-mile sprint! #GetRucky"
   - Challenge: "Can you ruck {distance} miles this week? Tag @getrucky!"
   - Theme: "Ruck Tips Tuesday: Hydrate every {time} minutes! 💧"
@@ -167,16 +167,16 @@ The bot will:
 - [x] Test via `heroku run bash`.
 
 **Tasks**:
-- [ ] Obtain API credentials (X, rucking app, xAI).
-- [ ] Populate `pun_library.db` with 100 templates (15-20 per category).
-- [ ] Test API connectivity (X, Heroku app API, xAI API).
+- [x] Obtain API credentials (X, rucking app, xAI).
+- [x] Populate `pun_library.db` with 100 templates (15-20 per category).
+- [x] Test API connectivity (X, Heroku app API, xAI API). Note: Heroku app API test skipped for now.
 - [x] Create Heroku app (`heroku create getrucky-bot`).
-- [ ] Add Heroku Postgres and Papertrail add-ons.
-- [ ] Set environment variables (`heroku config:set XAI_API_KEY=xxx`).
+- [x] Add Heroku Postgres and Papertrail add-ons.
+- [x] Set environment variables (`heroku config:set XAI_API_KEY=xxx`).
 - [x] Deploy to Heroku (`git push heroku main`).
-- [ ] Configure Standard-1X dyno (~$25/month).
-- [ ] Enable auto-scaling (1-2 dynos).
-- [ ] Set up Papertrail for alerts.
+- [x] Configure Standard-1X dyno (~$25/month).
+- [ ] Enable auto-scaling (1-2 dynos). Note: Skipped for now.
+- [x] Set up Papertrail for alerts. Note: Add-on installed; alerts require manual setup via Papertrail dashboard.
 - [ ] Schedule daily backups (`backup.py`).
 
 #### Phase 2: Core Functionality (3-4 weeks)
@@ -204,22 +204,26 @@ The bot will:
   - Cache result in `model_cache.db` (schema: `cache (prompt, response, timestamp)`).
   - Fallback: Random template from `pun_library.db` if API fails.
   - Ensure <280 characters.
-- [x] Function: `generate_session_post(session_data)`:
-  - Input: Session data (e.g., `{user: "RuckBoss", distance: 8, time: "2h"}`).
-  - Prompt: "Create a shout-out post for a ruck session: {user} rucked {distance} miles in {time}."
-  - Example: "@RuckBoss rucked 8 miles in 2h! Join the ruckus! 🥾 @getrucky"
-  - Cache result in `model_cache.db`.
-  - Fallback: Format template from `pun_library.db`.
-- [x] Function: `generate_reply(tweet_text, sentiment, content_type=None)`:
-  - Input: Tweet text, sentiment (from TextBlob: positive, negative, neutral), optional content_type.
-  - If content_type specified (e.g., poll), prompt: "Generate a {sentiment} rucking {content_type} reply, <280 characters."
-  - Else, prompt: "Generate a {sentiment} rucking reply with a pun, <280 characters."
-  - Examples:
-    - Positive: "Ruck yeah, you're crushing it! Keep rucking 'n' rolling! 💪"
-    - Negative: "Ruck stuck? DM us to get back on track! 🥾"
-    - Neutral (poll): "Got a fave ruck trail? 🥾 A) Urban B) Forest #GetRucky"
-  - Cache result in `model_cache.db`.
-  - Fallback: Use `pun_library.db` reply template.
+- [x] Function: `generate_session_post(xai_headers, session_data)`:
+  - Enhanced achievement tracking:
+    - Double-digit distance (10+ miles)
+    - 100-mile milestone
+    - 7-day streak
+  - Context-aware prompts with achievements
+  - Dynamic emoji selection
+  - Enhanced fallback templates
+- [x] Function: `generate_reply(xai_headers, tweet_text, sentiment, content_type, sentiment_context)`:
+  - Context-aware prompt construction:
+    - Sentiment-based tone selection
+    - Content type integration
+    - Special context handling
+  - Enhanced prompt examples:
+    - Very positive: "very enthusiastic and encouraging rucking challenge"
+    - Very negative: "empathetic and uplifting rucking meme"
+    - Question: "informative and helpful rucking theme"
+    - Rucking mention: "acknowledging their rucking mention with a shoutout"
+  - Dynamic template selection based on sentiment
+  - Caching with 24-hour expiration
 - [x] Test all functions with mock xAI API responses.
 
 **File: `scheduler.py`**
@@ -238,16 +242,48 @@ The bot will:
 - [x] Test scheduling with dummy posts and engagement tasks.
 
 **File: `interaction_handler.py`**
-- [x] Function: `monitor_mentions()`:
-  - Poll X API every 5 minutes for @getrucky mentions/replies.
-  - Use TextBlob to classify sentiment (positive, negative, neutral).
-  - Randomly select reply content_type (e.g., pun, poll) based on `CONTENT_WEIGHTS`.
-  - Call `generate_reply(tweet_text, sentiment, content_type)` for each mention.
-  - Post reply via `reply_to_tweet()`.
-  - Limit to 50 replies/hour.
-- [x] Function: `log_interaction(tweet_id, reply_text, sentiment, content_type)`:
-  - Store in `interaction_log.db` (schema: `logs (tweet_id TEXT, reply_text TEXT, sentiment TEXT, content_type TEXT, timestamp TIMESTAMP)`).
-  - Backup to Heroku Postgres via `backup.py`.
+- [x] Function: `monitor_mentions(x_client, xai_headers)`:
+  - Monitor @getrucky mentions every 5 minutes.
+  - Process up to `MAX_REPLIES` per hour.
+  - Enhanced sentiment analysis with context:
+    - Granular sentiment detection (very_positive, positive, neutral, negative, very_negative)
+    - Question detection and special handling
+    - Rucking mention detection
+    - Emoji and hashtag analysis
+    - Subjectivity analysis
+  - Context-aware reply generation:
+    - Dynamic prompt construction based on sentiment and context
+    - Special handling for questions and rucking mentions
+    - Tone matching for emoji usage
+    - Enhanced fallback templates
+  - Log interactions with detailed context:
+    - Sentiment metrics (polarity, subjectivity)
+    - Content characteristics (questions, hashtags, mentions)
+    - Interaction metadata (length, emojis, rucking mentions)
+- [x] Function: `analyze_sentiment(text)`:
+  - Enhanced TextBlob analysis with context:
+    - Polarity and subjectivity scores
+    - Question detection
+    - Hashtag and mention detection
+    - Length analysis
+    - Rucking keyword detection
+    - Emoji presence
+  - Return sentiment category and context dictionary
+- [x] Function: `select_reply_content_type(sentiment, sentiment_context)`:
+  - Dynamic weight adjustment based on sentiment:
+    - Very positive: Boost challenges and shoutouts
+    - Very negative: Boost memes and puns
+    - Questions: Boost themes and challenges
+    - Rucking mentions: Boost shoutouts and challenges
+  - Normalized weight selection
+  - Fallback to puns if no match
+- [x] Function: `log_interaction(tweet_id, reply_text, sentiment, content_type, mention_timestamp, sentiment_context)`:
+  - Enhanced logging with context:
+    - Sentiment metrics
+    - Content characteristics
+    - Interaction metadata
+  - SQLite storage in `/tmp/interaction_log.db`
+  - Automatic table creation with new columns
 - [x] Test with simulated mentions and replies.
 
 **File: `cross_post.py`**
@@ -348,12 +384,12 @@ The bot will:
 - [x] Create GitHub repository (`https://github.com/orourkera/getrucky-bot.git`)
 - [x] Add `.python-version` file to specify Python version for Heroku
 - [ ] Set up environment variables on Heroku
-- [ ] Add Heroku Postgres add-on
+- [x] Add Heroku Postgres add-on
 - [ ] Install and configure Papertrail for monitoring
 - [x] Create schedule for database backups
 
 ### Final Tasks
-- [ ] Create a script to populate `pun_library.db` with 100+ templates (15-20 per category)
+- [x] Create a script to populate `pun_library.db` with 100+ templates (15-20 per category)
 - [ ] Set up unit and integration tests
 - [ ] Implement a dashboard or reporting mechanism for monitoring bot performance
 - [ ] Create a documentation file explaining the bot's features and operation

@@ -2,6 +2,7 @@
 
 import tweepy
 import requests
+from requests_oauthlib import OAuth1
 import logging
 import time
 from typing import Optional

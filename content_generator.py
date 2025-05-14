@@ -50,11 +50,31 @@ def generate_post(xai_headers, content_type, theme=None):
     return get_random_template('post', content_type)
 
 def generate_session_post(xai_headers, session_data):
-    """Generate a shout-out post for a ruck session."""
+    """Generate a shout-out post for a ruck session with achievements and milestones."""
     user = session_data.get('user', 'RuckStar')
     distance = session_data.get('distance', '5')
     time = session_data.get('duration', '1h')
-    prompt = f"Create a shout-out post for a ruck session: {user} rucked {distance} miles in {time}."
+    total_distance = session_data.get('total_distance', '0')
+    streak = session_data.get('streak', '0')
+    
+    # Check for achievements
+    achievements = []
+    if float(distance) >= 10:
+        achievements.append("double-digit distance")
+    if float(total_distance) >= 100:
+        achievements.append("100-mile milestone")
+    if int(streak) >= 7:
+        achievements.append(f"{streak}-day streak")
+    
+    achievement_text = " and achieved " + ", ".join(achievements) if achievements else ""
+    
+    prompt = f"""Create an engaging shout-out post for a ruck session:
+    User: {user}
+    Distance: {distance} miles
+    Duration: {time}
+    Achievements: {achievement_text if achievement_text else 'None'}
+    Include relevant emojis and hashtags. Keep it under 280 characters."""
+    
     cached_response = get_cached_response(prompt)
     if cached_response:
         logger.info(f"Using cached response for session post")
@@ -69,16 +89,52 @@ def generate_session_post(xai_headers, session_data):
     except Exception as e:
         logger.error(f"Failed to generate session post with xAI API: {e}")
     
-    # Fallback to template
+    # Enhanced fallback template
     template = get_random_template('post', 'shoutout')
-    return template.format(user=user, distance=distance)
+    return template.format(
+        user=user,
+        distance=distance,
+        achievements=achievement_text if achievement_text else "",
+        emoji="🏆" if achievements else "🥾"
+    )
 
-def generate_reply(xai_headers, tweet_text, sentiment, content_type=None):
-    """Generate a reply based on sentiment and optional content type."""
-    if content_type:
-        prompt = f"Generate a {sentiment} rucking {content_type} reply, <280 characters."
+def generate_reply(xai_headers, tweet_text, sentiment, content_type=None, sentiment_context=None):
+    """Generate a reply based on sentiment, content type, and context."""
+    # Build context-aware prompt
+    prompt_parts = []
+    
+    # Add sentiment context
+    if sentiment.startswith('very_positive'):
+        prompt_parts.append("very enthusiastic and encouraging")
+    elif sentiment.startswith('positive'):
+        prompt_parts.append("positive and supportive")
+    elif sentiment.startswith('very_negative'):
+        prompt_parts.append("empathetic and uplifting")
+    elif sentiment.startswith('negative'):
+        prompt_parts.append("understanding and motivational")
+    elif sentiment.startswith('question'):
+        prompt_parts.append("informative and helpful")
     else:
-        prompt = f"Generate a {sentiment} rucking reply with a pun, <280 characters."
+        prompt_parts.append("friendly and engaging")
+    
+    # Add content type context
+    if content_type:
+        prompt_parts.append(f"rucking {content_type}")
+    else:
+        prompt_parts.append("rucking")
+    
+    # Add specific context elements
+    if sentiment_context:
+        if sentiment_context.get('contains_ruck'):
+            prompt_parts.append("acknowledging their rucking mention")
+        if sentiment_context.get('is_question'):
+            prompt_parts.append("answering their question")
+        if sentiment_context.get('contains_emojis'):
+            prompt_parts.append("matching their tone")
+    
+    # Construct final prompt
+    prompt = f"Generate a {' '.join(prompt_parts)} reply, <280 characters."
+    
     cached_response = get_cached_response(prompt)
     if cached_response:
         logger.info(f"Using cached response for {sentiment} reply")
@@ -93,21 +149,70 @@ def generate_reply(xai_headers, tweet_text, sentiment, content_type=None):
     except Exception as e:
         logger.error(f"Failed to generate {sentiment} reply with xAI API: {e}")
     
-    # Fallback to template
-    return get_random_template('reply', content_type if content_type else 'pun')
+    # Enhanced fallback template selection based on sentiment
+    template_category = 'positive' if sentiment.startswith(('very_positive', 'positive')) else \
+                       'negative' if sentiment.startswith(('very_negative', 'negative')) else \
+                       'question' if sentiment.startswith('question') else \
+                       'neutral'
+    
+    return get_random_template('reply', template_category)
 
 def get_prompt_for_content_type(content_type, theme=None):
-    """Return the appropriate prompt for the content type."""
-    prompts = {
-        'pun': "Generate a rucking pun like 'Ruck it Up', <280 characters.",
-        'challenge': "Generate a rucking challenge for 5 miles, <280 characters.",
-        'theme': f"Generate a {theme} post (e.g., Ruck Tips Tuesday), <280 characters." if theme else "Generate a themed rucking post, <280 characters.",
-        'poll': "Generate a rucking poll with 2-4 options, <280 characters.",
-        'meme': "Generate a humorous rucking meme text, <280 characters.",
-        'shoutout': "Generate a shout-out for @RuckStar rucking 5 miles, <280 characters.",
-        'ugc': "Generate a comment for a user's ruck post by @RuckFan, <280 characters."
+    """Return the appropriate prompt for the content type with enhanced variety."""
+    current_month = datetime.utcnow().month
+    season = get_season(current_month)
+    
+    base_prompts = {
+        'pun': [
+            "Generate a creative rucking pun that plays on words like 'ruck', 'pack', or 'march', <280 characters.",
+            "Create a witty rucking pun that would make fellow ruckers smile, <280 characters.",
+            "Write a clever rucking pun that incorporates fitness or outdoor themes, <280 characters."
+        ],
+        'challenge': [
+            f"Generate a {season}-themed rucking challenge for 5 miles, <280 characters.",
+            "Create a rucking challenge that encourages community participation, <280 characters.",
+            "Design a progressive rucking challenge that builds endurance, <280 characters."
+        ],
+        'theme': [
+            f"Generate a {theme} post with practical rucking tips, <280 characters." if theme else "Generate a themed rucking post, <280 characters.",
+            f"Create an engaging {theme} post about rucking benefits, <280 characters." if theme else "Create an engaging themed rucking post, <280 characters.",
+            f"Write an inspiring {theme} post about rucking achievements, <280 characters." if theme else "Write an inspiring themed rucking post, <280 characters."
+        ],
+        'poll': [
+            "Generate a rucking poll about training preferences, <280 characters.",
+            "Create a poll about favorite rucking locations, <280 characters.",
+            "Design a poll about rucking gear preferences, <280 characters."
+        ],
+        'meme': [
+            "Generate a humorous rucking meme about common rucking experiences, <280 characters.",
+            "Create a relatable rucking meme about training struggles, <280 characters.",
+            "Write a funny rucking meme about gear or preparation, <280 characters."
+        ],
+        'shoutout': [
+            "Generate a motivational shout-out for a rucking achievement, <280 characters.",
+            "Create an encouraging shout-out for consistent rucking, <280 characters.",
+            "Write an inspiring shout-out for a rucking milestone, <280 characters."
+        ],
+        'ugc': [
+            "Generate an engaging comment for a user's ruck post, <280 characters.",
+            "Create a supportive comment for a rucking achievement, <280 characters.",
+            "Write an encouraging comment for a rucking milestone, <280 characters."
+        ]
     }
-    return prompts.get(content_type, prompts['pun'])
+    
+    prompts = base_prompts.get(content_type, base_prompts['pun'])
+    return random.choice(prompts)
+
+def get_season(month):
+    """Return the current season based on month."""
+    if month in [12, 1, 2]:
+        return "winter"
+    elif month in [3, 4, 5]:
+        return "spring"
+    elif month in [6, 7, 8]:
+        return "summer"
+    else:
+        return "fall"
 
 def get_random_template(post_type, category):
     """Fetch a random template from pun_library.db for the given type and category."""
