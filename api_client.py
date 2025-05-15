@@ -9,6 +9,7 @@ from typing import Optional
 from config import X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRET, APP_API_TOKEN, XAI_API_KEY, get_config, X_BEARER_TOKEN, GROQ_API_KEY
 import datetime
 import os
+from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
@@ -355,34 +356,19 @@ def initialize_xai_client():
         logger.error(f"Failed to initialize xAI API client: {e}")
         raise
 
-def generate_text(headers, prompt, max_length=280):
-    """Generate text using xAI API with a given prompt."""
+def generate_text(headers, prompt):
+    """Generate text using xAI API with the provided prompt."""
     try:
-        payload = {
-            "model": "grok-2",
-            "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": 150,
-            "temperature": 0.9
-        }
-        
-        response = requests.post(
-            "https://api.x.ai/v1/chat/completions",
-            json=payload,
-            headers=headers,
-            timeout=15
+        completion = xai_client.chat.completions.create(
+            model="grok-3-beta",
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": prompt},
+            ],
         )
-        
-        response.raise_for_status()
-        generated_text = response.json()['choices'][0]['message']['content'].strip()
-        
-        if len(generated_text) > max_length:
-            generated_text = generated_text[:max_length].rsplit(' ', 1)[0] + '...'
-            
-        logger.info(f"Successfully generated text with xAI API: {prompt[:30]}...")
-        return generated_text
+        return completion.choices[0].message.content
     except Exception as e:
-        logger.error(f"Error generating text with xAI API: {e}")
-        raise  # Let the caller handle the error
+        raise Exception(f"xAI API error: {str(e)}")
 
 def check_rate_limit_status():
     """Check and log the current Twitter/X API rate limit status for the authenticated user."""
