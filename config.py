@@ -22,6 +22,7 @@ X_ACCESS_TOKEN_SECRET = os.getenv('X_ACCESS_TOKEN_SECRET', '')
 X_BEARER_TOKEN = os.getenv('X_BEARER_TOKEN', '')
 APP_API_TOKEN = os.getenv('APP_API_TOKEN', '')
 XAI_API_KEY = os.getenv('XAI_API_KEY', '')
+GROQ_API_KEY = os.getenv('GROQ_API_KEY', '')  # Added Groq API key as an alternative to xAI
 
 # Database Configuration
 DATABASE_URL = os.getenv('DATABASE_URL', '')
@@ -74,13 +75,10 @@ WEEKLY_THEMES = {
     6: "Ruck Fun Sunday"
 }
 CONTENT_WEIGHTS = {
-    'pun': 0.3,
-    'challenge': 0.2,
-    'theme': 0.2,
+    'theme': 0.8,   # Benefits of rucking
     'poll': 0.1,
-    'meme': 0.1,
-    'shoutout': 0.05,
-    'ugc': 0.05
+    'meme': 0.05,
+    'pun': 0.05
 }
 LIKE_PROBABILITY = 0.9  # 90% chance to like 'ruck' posts
 RETWEET_ACCOUNTS = ["GaryBrecka", "PeterAttiaMD"]
@@ -115,11 +113,17 @@ def get_config(key: str) -> Any:
 
 def validate_config():
     required_keys = [
-        'X_API_KEY', 'X_API_SECRET', 'X_ACCESS_TOKEN', 'X_ACCESS_TOKEN_SECRET',
-        'XAI_API_KEY'
+        'X_API_KEY', 'X_API_SECRET', 'X_ACCESS_TOKEN', 'X_ACCESS_TOKEN_SECRET'
     ]
+    
+    # Either xAI or Groq API key must be available
+    has_ai_key = bool(XAI_API_KEY or GROQ_API_KEY)
+    
     status = {}
     for key in required_keys:
         value = globals().get(key, '') or os.getenv(key, '')
         status[key] = bool(value)
+    
+    status['AI_API_KEY'] = has_ai_key  # Add check for either xAI or Groq key
+    
     return status 

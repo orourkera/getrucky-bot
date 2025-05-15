@@ -6,7 +6,7 @@ from requests_oauthlib import OAuth1
 import logging
 import time
 from typing import Optional
-from config import X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRET, APP_API_TOKEN, XAI_API_KEY, get_config, X_BEARER_TOKEN
+from config import X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRET, APP_API_TOKEN, XAI_API_KEY, get_config, X_BEARER_TOKEN, GROQ_API_KEY
 import datetime
 import os
 
@@ -345,7 +345,10 @@ def get_session_details(headers, session_id):
 def initialize_xai_client():
     """Initialize and return xAI API client."""
     try:
-        headers = {'Authorization': f'Bearer {XAI_API_KEY}', 'Content-Type': 'application/json'}
+        headers = {
+            'Authorization': f'Bearer {XAI_API_KEY}',
+            'Content-Type': 'application/json'
+        }
         logger.info("xAI API client initialized")
         return headers
     except Exception as e:
@@ -356,25 +359,30 @@ def generate_text(headers, prompt, max_length=280):
     """Generate text using xAI API with a given prompt."""
     try:
         payload = {
-            'prompt': prompt,
-            'max_tokens': 100,
-            'temperature': 0.9
+            "model": "gpt-4o",
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": 150,
+            "temperature": 0.9
         }
+        
         response = requests.post(
-            "https://x.ai/api",
+            "https://api.x.ai/v1/chat/completions",
             json=payload,
             headers=headers,
             timeout=15
         )
+        
         response.raise_for_status()
-        generated_text = response.json().get('choices', [{}])[0].get('text', '').strip()
+        generated_text = response.json()['choices'][0]['message']['content'].strip()
+        
         if len(generated_text) > max_length:
             generated_text = generated_text[:max_length].rsplit(' ', 1)[0] + '...'
-        logger.info(f"Generated text for prompt: {prompt[:30]}...")
+            
+        logger.info(f"Successfully generated text with xAI API: {prompt[:30]}...")
         return generated_text
-    except requests.exceptions.RequestException as e:
+    except Exception as e:
         logger.error(f"Error generating text with xAI API: {e}")
-        return ""
+        raise  # Let the caller handle the error
 
 def check_rate_limit_status():
     """Check and log the current Twitter/X API rate limit status for the authenticated user."""

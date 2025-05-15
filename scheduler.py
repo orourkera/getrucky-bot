@@ -67,9 +67,17 @@ def post_regular_content(x_client, xai_headers):
     """Generate and post regular content."""
     try:
         content_type, theme = content_generator.select_content_type()
-        post_text = content_generator.generate_post(xai_headers, content_type, theme)
+        try:
+            post_text = content_generator.generate_post(xai_headers, content_type, theme)
+        except Exception as e:
+            logger.error(f"Error during content generation: {e}")
+            # If API fails, use template fallback
+            post_text = content_generator.get_random_template('post', content_type)
+            logger.warning(f"Using template fallback for {content_type} post due to xAI API error")
+        
         if len(post_text) > 280:
             post_text = post_text[:277] + '...'
+        
         tweet_id = api_client.post_tweet(x_client, post_text)
         logger.info(f"Posted regular content (type: {content_type}): {post_text[:50]}...")
         return tweet_id

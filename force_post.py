@@ -53,7 +53,15 @@ def main():
     # Step 4: Initialize API clients
     logger.info("Initializing API clients")
     try:
+        # Make sure to verify credentials and use OAuth 1.0a explicitly
+        logger.info("Initializing X client with OAuth 1.0a authentication")
         x_client = api_client.initialize_x_client(max_retries=5, retry_delay=10, verify=True)
+        
+        # Additional verification to ensure the client is using OAuth 1.0a
+        if not hasattr(x_client, 'access_token') or not x_client.access_token:
+            logger.warning("X client may not be properly configured with OAuth 1.0a")
+            # Proceed anyway, but log the warning
+        
         xai_client = api_client.initialize_xai_client()
         logger.info("API clients initialized successfully")
     except Exception as e:
@@ -66,10 +74,18 @@ def main():
         content_type, theme = content_generator.select_content_type()
         post_text = content_generator.generate_post(xai_client, content_type, theme)
         
+        logger.info(f"Generated post text for content type '{content_type}': {post_text[:50]}...")
+        
         if len(post_text) > 280:
             post_text = post_text[:277] + '...'
-            
+        
+        # Explicitly call post_tweet with proper OAuth 1.0a client    
+        logger.info("Posting tweet using OAuth 1.0a authentication")
         tweet_id = api_client.post_tweet(x_client, post_text)
+        
+        if not tweet_id:
+            logger.error("No tweet ID returned - posting likely failed")
+            return False
         
         # Log the tweet to interaction_log.db
         try:

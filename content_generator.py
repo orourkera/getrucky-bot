@@ -33,21 +33,24 @@ def generate_post(xai_headers, content_type, theme=None):
     """Generate a post based on the specified content type."""
     prompt = get_prompt_for_content_type(content_type, theme)
     cached_response = get_cached_response(prompt)
-    if cached_response:
+    if cached_response and len(cached_response) > 50:
         logger.info(f"Using cached response for {content_type} post")
         return cached_response
-    
+
     try:
         text = api_client.generate_text(xai_headers, prompt)
-        if text:
+        if text and len(text) > 50:
             cache_response(prompt, text)
             logger.info(f"Generated {content_type} post with xAI API")
             return text
     except Exception as e:
         logger.error(f"Failed to generate {content_type} post with xAI API: {e}")
-    
+        # Fall through to template-based backup
+
     # Fallback to template from pun_library.db
-    return get_random_template('post', content_type)
+    template = get_random_template('post', content_type)
+    logger.warning(f"Using template fallback for {content_type} post due to API failure")
+    return template
 
 def generate_session_post(xai_headers, session_data):
     """Generate a shout-out post for a ruck session with achievements and milestones."""
@@ -91,6 +94,7 @@ def generate_session_post(xai_headers, session_data):
     
     # Enhanced fallback template
     template = get_random_template('post', 'shoutout')
+    logger.warning(f"Using template fallback for session post due to API failure")
     return template.format(
         user=user,
         distance=distance,
@@ -155,13 +159,15 @@ def generate_reply(xai_headers, tweet_text, sentiment, content_type=None, sentim
                        'question' if sentiment.startswith('question') else \
                        'neutral'
     
-    return get_random_template('reply', template_category)
+    template = get_random_template('reply', template_category)
+    logger.warning(f"Using template fallback for {sentiment} reply due to API failure")
+    return template
 
 def get_prompt_for_content_type(content_type, theme=None):
-    """Return the appropriate prompt for the content type with enhanced variety."""
+    """Return the appropriate prompt for the content type with enhanced variety and minimum length."""
     current_month = datetime.utcnow().month
     season = get_season(current_month)
-    
+
     base_prompts = {
         'pun': [
             "Generate a creative rucking pun that plays on words like 'ruck', 'pack', or 'march', <280 characters.",
@@ -174,9 +180,10 @@ def get_prompt_for_content_type(content_type, theme=None):
             "Design a progressive rucking challenge that builds endurance, <280 characters."
         ],
         'theme': [
-            f"Generate a {theme} post with practical rucking tips, <280 characters." if theme else "Generate a themed rucking post, <280 characters.",
-            f"Create an engaging {theme} post about rucking benefits, <280 characters." if theme else "Create an engaging themed rucking post, <280 characters.",
-            f"Write an inspiring {theme} post about rucking achievements, <280 characters." if theme else "Write an inspiring themed rucking post, <280 characters."
+            f"Generate a {theme} post about the health and fitness benefits of rucking. Make it informative and at least 50 characters, <280 characters.",
+            f"Create an engaging {theme} post highlighting why rucking is good for you. Ensure it is at least 50 characters, <280 characters.",
+            "List a science-backed benefit of rucking in a detailed way (at least 50 characters), <280 characters.",
+            "Share a motivational fact about how rucking improves health. Minimum 50 characters, <280 characters."
         ],
         'poll': [
             "Generate a rucking poll about training preferences, <280 characters.",
@@ -199,7 +206,7 @@ def get_prompt_for_content_type(content_type, theme=None):
             "Write an encouraging comment for a rucking milestone, <280 characters."
         ]
     }
-    
+
     prompts = base_prompts.get(content_type, base_prompts['pun'])
     return random.choice(prompts)
 
