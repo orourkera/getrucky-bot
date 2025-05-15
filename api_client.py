@@ -9,7 +9,6 @@ from typing import Optional
 from config import X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRET, APP_API_TOKEN, XAI_API_KEY, get_config, X_BEARER_TOKEN, GROQ_API_KEY
 import datetime
 import os
-from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
