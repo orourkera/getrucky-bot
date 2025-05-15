@@ -359,15 +359,30 @@ def initialize_xai_client():
 def generate_text(headers, prompt):
     """Generate text using xAI API with the provided prompt."""
     try:
-        completion = xai_client.chat.completions.create(
-            model="grok-3-beta",
-            messages=[
+        payload = {
+            "model": "grok-3-beta",
+            "messages": [
                 {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": prompt},
+                {"role": "user", "content": prompt}
             ],
+            "max_tokens": 280,
+            "temperature": 0.9
+        }
+        
+        response = requests.post(
+            "https://api.x.ai/v1/chat/completions",
+            json=payload,
+            headers=headers,
+            timeout=15
         )
-        return completion.choices[0].message.content
+        
+        response.raise_for_status()
+        generated_text = response.json()['choices'][0]['message']['content'].strip()
+        
+        logger.info(f"Successfully generated text with xAI API: {prompt[:30]}...")
+        return generated_text
     except Exception as e:
+        logger.error(f"Error generating text with xAI API: {e}")
         raise Exception(f"xAI API error: {str(e)}")
 
 def check_rate_limit_status():
