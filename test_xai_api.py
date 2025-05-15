@@ -33,7 +33,7 @@ def test_xai_api():
     
     # API payload
     payload = {
-        "model": "gpt-4o",
+        "model": "grok-2",
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": 150,
         "temperature": 0.9

@@ -359,7 +359,7 @@ def generate_text(headers, prompt, max_length=280):
     """Generate text using xAI API with a given prompt."""
     try:
         payload = {
-            "model": "gpt-4o",
+            "model": "grok-2",
             "messages": [{"role": "user", "content": prompt}],
             "max_tokens": 150,
             "temperature": 0.9
