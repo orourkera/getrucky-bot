@@ -387,10 +387,10 @@ def generate_text(headers, prompt):
 def check_rate_limit_status():
     """Check and log the current Twitter/X API rate limit status for the authenticated user."""
     auth = requests.auth.OAuth1(
-        os.getenv('TWITTER_API_KEY'),
-        os.getenv('TWITTER_API_SECRET'),
-        os.getenv('TWITTER_ACCESS_TOKEN'),
-        os.getenv('TWITTER_ACCESS_TOKEN_SECRET')
+        X_API_KEY,
+        X_API_SECRET,
+        X_ACCESS_TOKEN,
+        X_ACCESS_TOKEN_SECRET
     )
     url = "https://api.twitter.com/1.1/application/rate_limit_status.json"
     try:
