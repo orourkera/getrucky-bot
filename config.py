@@ -44,24 +44,34 @@ MAX_REPLIES = 50  # Max replies per hour
 
 def get_post_times():
     """
-    Generate a list of (hour, minute) tuples in UTC for randomized post times
+    Generate a list of (hour, minute) tuples in UTC for evenly distributed post times
     between 6am and 9pm US Eastern Time (ET) for today.
     """
     num_posts = random.choice(POST_FREQUENCY)
-    # ET hours: 6am to 9pm inclusive
-    et_hours = list(range(6, 22))  # 6 to 21
-    # Randomly select hours for today
-    selected_hours = random.sample(et_hours, k=num_posts)
+    # ET hours: 6am to 9pm inclusive (15 hours span)
+    start_hour = 6
+    end_hour = 21  # 9 PM
+    total_hours = end_hour - start_hour
+    
+    # Calculate interval between posts to spread them evenly
+    interval = total_hours / max(num_posts, 1)
     post_times_utc = []
     today = datetime.now(TZ).date()
-    for hour in selected_hours:
-        minute = random.randint(0, 59)
+    
+    for i in range(num_posts):
+        hour_offset = start_hour + (i * interval)
+        hour = int(hour_offset)
+        minute = int((hour_offset - hour) * 60)  # Convert fractional hour to minutes
+        if hour >= end_hour:  # Ensure we don't go past 9 PM ET
+            hour = end_hour - 1
+            minute = random.randint(0, 59)
         # Create ET datetime
         et_dt = datetime.combine(today, time(hour, minute), tzinfo=TZ)
         # Convert to UTC
         utc_dt = et_dt.astimezone(ZoneInfo("UTC")) if hasattr(et_dt, 'astimezone') else et_dt.astimezone(pytz.utc)
         post_times_utc.append((utc_dt.hour, utc_dt.minute))
-    # Sort by time
+    
+    # Sort by time just in case
     post_times_utc.sort()
     return post_times_utc
 
