@@ -85,14 +85,14 @@ WEEKLY_THEMES = {
     6: "Ruck Fun Sunday"
 }
 CONTENT_WEIGHTS = {
-    'theme': 0.8,   # Benefits of rucking
+    'health_benefits': 0.8,   # Benefits of rucking
     'poll': 0.1,
     'meme': 0.05,
     'pun': 0.05
 }
 LIKE_PROBABILITY = 0.9  # 90% chance to like 'ruck' posts
 RETWEET_ACCOUNTS = ["GaryBrecka", "PeterAttiaMD"]
-MIN_FOLLOWERS = 1000  # Minimum followers for retweet eligibility
+MIN_FOLLOWERS = 500  # Minimum followers for retweet eligibility
 
 # Content Moderation Blocklist
 BLOCKLIST = ["inappropriate_word1", "inappropriate_word2"]  # Add more as needed

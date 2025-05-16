@@ -17,16 +17,15 @@ MODEL_CACHE_DB = '/tmp/model_cache.db'
 def select_content_type():
     """Select content type based on weighted probability or weekly theme."""
     current_day = datetime.utcnow().weekday()
-    if random.random() < 0.2:  # 20% chance to use weekly theme based on CONTENT_WEIGHTS['theme']
-        return 'theme', WEEKLY_THEMES[current_day]
+    if random.random() < 0.2:  # 20% chance to use weekly theme for health benefits posts
+        return 'health_benefits', WEEKLY_THEMES[current_day]
     else:
         rand = random.random()
         cumulative_weight = 0
         for content_type, weight in CONTENT_WEIGHTS.items():
-            if content_type != 'theme':
-                cumulative_weight += weight
-                if rand <= cumulative_weight:
-                    return content_type, None
+            cumulative_weight += weight
+            if rand <= cumulative_weight:
+                return content_type, None
         return 'pun', None  # Default fallback
 
 def generate_post(xai_headers, content_type, theme=None):
@@ -164,51 +163,32 @@ def generate_reply(xai_headers, tweet_text, sentiment, content_type=None, sentim
     return template
 
 def get_prompt_for_content_type(content_type, theme=None):
-    """Return the appropriate prompt for the content type with enhanced variety and minimum length."""
+    """Return the appropriate prompt for the content type with clear focus on specific topics."""
     current_month = datetime.utcnow().month
     season = get_season(current_month)
 
     base_prompts = {
-        'pun': [
-            "Generate a creative rucking pun that plays on words like 'ruck', 'pack', or 'march', <280 characters.",
-            "Create a witty rucking pun that would make fellow ruckers smile, <280 characters.",
-            "Write a clever rucking pun that incorporates fitness or outdoor themes, <280 characters."
-        ],
-        'challenge': [
-            f"Generate a {season}-themed rucking challenge for 5 miles, <280 characters.",
-            "Create a rucking challenge that encourages community participation, <280 characters.",
-            "Design a progressive rucking challenge that builds endurance, <280 characters."
-        ],
-        'theme': [
-            f"Generate a {theme} post about the health and fitness benefits of rucking. Make it informative and at least 50 characters, <280 characters.",
-            f"Create an engaging {theme} post highlighting why rucking is good for you. Ensure it is at least 50 characters, <280 characters.",
-            "List a science-backed benefit of rucking in a detailed way (at least 50 characters), <280 characters.",
-            "Share a motivational fact about how rucking improves health. Minimum 50 characters, <280 characters."
-        ],
-        'poll': [
-            "Generate a rucking poll about training preferences, <280 characters.",
-            "Create a poll about favorite rucking locations, <280 characters.",
-            "Design a poll about rucking gear preferences, <280 characters."
-        ],
-        'meme': [
-            "Generate a humorous rucking meme about common rucking experiences, <280 characters.",
-            "Create a relatable rucking meme about training struggles, <280 characters.",
-            "Write a funny rucking meme about gear or preparation, <280 characters."
-        ],
-        'shoutout': [
-            "Generate a motivational shout-out for a rucking achievement, <280 characters.",
-            "Create an encouraging shout-out for consistent rucking, <280 characters.",
-            "Write an inspiring shout-out for a rucking milestone, <280 characters."
-        ],
-        'ugc': [
-            "Generate an engaging comment for a user's ruck post, <280 characters.",
-            "Create a supportive comment for a rucking achievement, <280 characters.",
-            "Write an encouraging comment for a rucking milestone, <280 characters."
-        ]
+        'pun': "You are a world class comedian. Create a witty rucking pun that would make fellow ruckers smile, playing on things that rhyme with ruck and rucking, including profane ones like 'go ruck yourself' <280 characters.",
+        
+        'challenge': f"Generate a {season}-themed rucking challenge that encourages community participation with specific goals and measurable targets, <280 characters.",
+        
+        'health_benefits': f"You are an avid outdoorsman, health scientist and researcher. You like data points and factsGenerate a {theme} post about the health and fitness benefits of rucking. Include specific facts, statistics or research data to make it informative. Minimum 100 characters, <280 characters.",
+        
+        'poll': "Create an engaging poll about rucking preferences with specific options related to gear, training methods, or favorite locations, <280 characters.",
+        
+        'meme': "Create a relatable rucking meme about training struggles or gear preparations with a specific humorous scenario, <280 characters.",
+        
+        'shoutout': "Generate a motivational shout-out for a rucking achievement with specific details about the accomplishment and encouraging words, <280 characters.",
+        
+        'ugc': "Create a supportive comment for a user's rucking post with specific feedback about their achievement or effort, <280 characters."
     }
 
-    prompts = base_prompts.get(content_type, base_prompts['pun'])
-    return random.choice(prompts)
+    # Handle the renamed theme category
+    if content_type == 'theme':
+        content_type = 'health_benefits'
+    
+    prompt = base_prompts.get(content_type, base_prompts['pun'])
+    return prompt
 
 def get_season(month):
     """Return the current season based on month."""
