@@ -52,58 +52,74 @@ def check_location_points(session_id=None):
         except Exception as direct_error:
             logger.error(f"Error making direct request: {direct_error}")
         
-        # Explicitly check for session 643 which we know exists
-        session_id = '643'
-        logger.info(f"Checking location points for known session ID: {session_id}")
+        # Use provided session ID or default to 643
+        if not session_id and len(sys.argv) > 1:
+            session_id = sys.argv[1]
         
-        # Try different format approaches for session_id
-        formats_to_try = [
-            session_id,               # String
-            int(session_id) if session_id.isdigit() else session_id,  # Integer
-            f"'{session_id}'",        # SQL string literal
-            f"\"{session_id}\"",      # Double quoted
-        ]
+        if not session_id:
+            session_id = '643'  # Default to known good session
         
-        success = False
-        for format_id in formats_to_try:
-            try:
-                logger.info(f"Trying session_id format: {format_id} (type: {type(format_id)})")
-                response = supabase_client.table('location_point').select('*').eq('session_id', format_id).limit(5).execute()
+        logger.info(f"Checking location points for session ID: {session_id}")
+        
+        # Try to get location points for the session
+        response = supabase_client.table('location_point').select('*').eq('session_id', int(session_id)).limit(5).execute()
+        
+        if not response.data:
+            logger.warning(f"No location points found for session {session_id}")
+            return False
+            
+        logger.info(f"Found {len(response.data)} location points for session {session_id}")
+        
+        # Print the first few points
+        for i, point in enumerate(response.data[:2]):
+            logger.info(f"Point {i+1}: lat={point.get('latitude')}, lon={point.get('longitude')}")
+        
+        # Test geocoding with the first point
+        first_point = response.data[0]
+        latitude = first_point.get('latitude')
+        longitude = first_point.get('longitude')
+        
+        if latitude and longitude:
+            logger.info(f"Geocoding coordinates: {latitude}, {longitude}")
+            location = geocode_coordinates(latitude, longitude)
+            logger.info(f"Geocoded location: {location}")
+            
+            # Check if location has data
+            if not location.get('city') and not location.get('state') and not location.get('country'):
+                logger.warning("Geocoding returned empty location data!")
                 
-                if response.data:
-                    logger.info(f"Success with format {format_id}! Found {len(response.data)} location points")
-                    success = True
-                    break
-                else:
-                    logger.warning(f"No data found with format {format_id}")
-            except Exception as format_error:
-                logger.error(f"Error with format {format_id}: {format_error}")
+                # Test with a known location as a sanity check
+                test_lat, test_lon = 40.7128, -74.0060  # New York City
+                logger.info(f"Testing geocoding with known coordinates (NYC): {test_lat}, {test_lon}")
+                test_location = geocode_coordinates(test_lat, test_lon)
+                logger.info(f"Test geocoded location: {test_location}")
         
-        if not success:
-            # Test if the location_point table exists
-            try:
-                logger.info("Checking if location_point table exists...")
-                # List tables
-                # Note: We're using PostgreSQL's information_schema to list tables
-                tables_query = """
-                    SELECT table_name FROM information_schema.tables 
-                    WHERE table_schema = 'public'
-                """
-                tables_response = supabase_client.rpc('pg_exec', {'query': tables_query}).execute()
-                logger.info(f"Tables in database: {tables_response.data}")
-                
-                # Check RLS (Row Level Security) policies
-                rls_query = """
-                    SELECT tablename, policyname, permissive, roles, cmd, qual
-                    FROM pg_policies
-                    WHERE schemaname = 'public'
-                """
-                rls_response = supabase_client.rpc('pg_exec', {'query': rls_query}).execute()
-                logger.info(f"RLS policies: {rls_response.data}")
-            except Exception as schema_error:
-                logger.error(f"Error checking schema: {schema_error}")
+        # Test the get_location_from_session function
+        logger.info(f"Testing get_location_from_session with session {session_id}...")
+        location_result = get_location_from_session(supabase_client, session_id)
+        logger.info(f"Location from session: {location_result}")
         
-        return success
+        # Test creating a full post
+        from content_generator import generate_map_post_text
+        
+        # Get the full session data
+        session_response = supabase_client.table('ruck_session').select('*').eq('id', int(session_id)).execute()
+        if session_response.data:
+            from supabase_client import format_session_data
+            formatted_data = format_session_data(session_response.data[0])
+            
+            # Add location information
+            formatted_data['city'] = location_result.get('city', '')
+            formatted_data['state'] = location_result.get('state', '')
+            formatted_data['country'] = location_result.get('country', '')
+            
+            logger.info(f"Formatted session data: {formatted_data}")
+            
+            # Generate post text
+            post_text = generate_map_post_text(formatted_data)
+            logger.info(f"Generated post text: {post_text}")
+        
+        return True
     except Exception as e:
         logger.error(f"Error checking location points: {e}")
         import traceback
