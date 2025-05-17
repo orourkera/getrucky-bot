@@ -52,8 +52,11 @@ def get_recent_ruck_sessions(client: Client, limit: int = 5) -> List[Dict[Any, A
 def get_session_route_points(client: Client, session_id: str) -> List[Tuple[float, float]]:
     """Fetch route points for a specific ruck session or generate dummy points if none exist."""
     try:
-        # Query the location_point table
-        response = client.table('location_point').select('*').eq('session_id', session_id).execute()
+        # Query the location_point table, ensuring session_id is converted to string
+        logger.info(f"Fetching route points for session {session_id}")
+        response = client.table('location_point').select('*').eq('session_id', str(session_id)).execute()
+        
+        logger.info(f"Query response data count: {len(response.data) if response.data else 0}")
         
         if response.data and len(response.data) >= 2:
             # Extract latitude and longitude from each point
@@ -153,14 +156,17 @@ def get_location_from_session(client: Client, session_id: str) -> Dict[str, str]
         A dictionary with keys 'city', 'state', and 'country'
     """
     try:
-        # Query the location_point table for this session
-        response = client.table('location_point').select('latitude,longitude').eq('session_id', session_id).limit(1).execute()
+        # Query the location_point table for this session, ensuring session_id is converted to string
+        logger.info(f"Querying location points for session {session_id}")
+        response = client.table('location_point').select('latitude,longitude').eq('session_id', str(session_id)).limit(1).execute()
         
         if response.data and len(response.data) > 0:
             # Get the first point
             first_point = response.data[0]
             latitude = first_point.get('latitude')
             longitude = first_point.get('longitude')
+            
+            logger.info(f"Found location point: lat={latitude}, lon={longitude}")
             
             if latitude and longitude:
                 # Geocode the coordinates
