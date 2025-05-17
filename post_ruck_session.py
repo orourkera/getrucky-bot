@@ -7,7 +7,7 @@ import sys
 from datetime import datetime
 import api_client
 import content_generator
-from supabase_client import initialize_supabase_client, get_session_with_map, format_session_data
+from supabase_client import initialize_supabase_client, get_session_with_map, format_session_data, get_location_from_session
 from direct_supabase_query import get_session_by_id, get_recent_sessions, get_session_route_points
 
 # Configure logging
@@ -111,6 +111,23 @@ def main():
         formatted_data = format_session_data(session_data)
         logger.info(f"Formatted session data: {formatted_data}")
         
+        # Get location information for the session
+        try:
+            location_data = get_location_from_session(supabase_client, session_id)
+            logger.info(f"Location data: {location_data}")
+            
+            # Add location information to formatted data
+            formatted_data['city'] = location_data.get('city', '')
+            formatted_data['state'] = location_data.get('state', '')
+            formatted_data['country'] = location_data.get('country', '')
+            
+            if location_data.get('city'):
+                logger.info(f"Added location: {location_data.get('city')}, {location_data.get('state')}, {location_data.get('country')}")
+            else:
+                logger.warning("No location data found for this session")
+        except Exception as loc_error:
+            logger.error(f"Error getting location data: {loc_error}")
+            
         # Generate post text
         post_text = content_generator.generate_map_post_text(formatted_data)
         
