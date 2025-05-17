@@ -332,7 +332,7 @@ Elevation gain: {elevation}m"""
                 example_location_display = "the great outdoors"
 
             prompt = f"""You are a rucking enthusiast and awkwared marketing intern. Write a short, engaging tweet (around 140-160 characters before stats are added) about the following ruck session.
-Your tweet should start by naturally mentioning the location calling out anything interesting about it: '{location_string_for_prompt}'.
+Your tweet should start by naturally mentioning the location, but you don't have to use all of it. You can use nicknames or interesting facts like "The sunshise state" or "the land of the rising sun" where appropriate calling out anything interesting about it: '{location_string_for_prompt}'.
 Then, make ONE keen, specific observation about this ruck.
 Session details:
 {session_details_for_prompt}
