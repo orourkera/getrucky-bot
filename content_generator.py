@@ -70,12 +70,12 @@ def generate_session_post(xai_headers, session_data):
     
     achievement_text = " and achieved " + ", ".join(achievements) if achievements else ""
     
-    prompt = f"""Create an engaging shout-out post for a ruck session:
+    prompt = f"""Create a brief shout-out post for a ruck session:
     User: {user}
     Distance: {distance} miles
     Duration: {time}
     Achievements: {achievement_text if achievement_text else 'None'}
-    Include relevant emojis and hashtags. Keep it under 280 characters."""
+    Include 1-2 relevant emojis and ONE hashtag maximum. IMPORTANT: Keep response UNDER 200 characters total."""
     
     cached_response = get_cached_response(prompt)
     if cached_response:
@@ -168,19 +168,19 @@ def get_prompt_for_content_type(content_type, theme=None):
     season = get_season(current_month)
 
     base_prompts = {
-        'pun': "You are a world class comedian. Create a witty rucking pun that would make fellow ruckers smile, playing on things that rhyme with ruck and rucking, including profane ones like 'go ruck yourself' <280 characters.",
+        'pun': "You are a world class comedian. Create a witty rucking pun that would make fellow ruckers smile, playing on things that rhyme with ruck and rucking, including profane ones like 'go ruck yourself'. IMPORTANT: Keep response UNDER 200 characters total.",
         
-        'challenge': f"Generate a {season}-themed rucking challenge that encourages community participation with specific goals and measurable targets, <280 characters.",
+        'challenge': f"Generate a {season}-themed rucking challenge that encourages community participation with specific goals and measurable targets. IMPORTANT: Keep response UNDER 200 characters total.",
         
-        'health_benefits': f"You are an avid outdoorsman, health scientist and researcher. You like data points and facts. Generate a {theme} post about the health and fitness benefits of rucking. Include specific facts or statistics. IMPORTANT: Keep response UNDER 280 characters total.",
+        'health_benefits': f"You are an avid outdoorsman, health scientist and researcher. You like data points and facts. Generate a {theme} post about the health and fitness benefits of rucking. Include ONE specific fact or statistic. IMPORTANT: Keep response UNDER 200 characters total.",
         
-        'poll': "Create an engaging poll about rucking preferences with specific options related to gear, training methods, or favorite locations, <280 characters.",
+        'poll': "Create an engaging poll about rucking preferences with specific options related to gear, training methods, or favorite locations. IMPORTANT: Keep response UNDER 200 characters total.",
         
-        'meme': "Create a relatable rucking meme about training struggles or gear preparations with a specific humorous scenario, <280 characters.",
+        'meme': "Create a relatable rucking meme about training struggles or gear preparations with a specific humorous scenario. IMPORTANT: Keep response UNDER 200 characters total.",
         
-        'shoutout': "Generate a motivational shout-out for a rucking achievement with specific details about the accomplishment and encouraging words, <280 characters.",
+        'shoutout': "Generate a motivational shout-out for a rucking achievement with specific details about the accomplishment and encouraging words. IMPORTANT: Keep response UNDER 200 characters total.",
         
-        'ugc': "Create a supportive comment for a user's rucking post with specific feedback about their achievement or effort, <280 characters."
+        'ugc': "Create a supportive comment for a user's rucking post with specific feedback about their achievement or effort. IMPORTANT: Keep response UNDER 200 characters total."
     }
 
     # Handle the renamed theme category

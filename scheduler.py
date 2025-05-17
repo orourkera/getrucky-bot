@@ -75,22 +75,23 @@ def post_regular_content(x_client, xai_headers):
             post_text = content_generator.get_random_template('post', content_type)
             logger.warning(f"Using template fallback for {content_type} post due to xAI API error")
         
-        # Add uniqueness to prevent duplicate content errors
+        # First trim content to leave room for timestamp
+        # Maximum tweet length is 280 characters
+        # We need to reserve about 11 characters for " [HH:MM]" timestamp format
+        char_limit = 265  # 280 - 15 chars for timestamp and buffer
+        
+        if len(post_text) > char_limit:
+            post_text = post_text[:char_limit]
+        
         # Create a unique timestamp (HH:MM format)
         current_time = datetime.utcnow().strftime('%H:%M')
         
-        # Check if the post already contains a hashtag
-        if '#' in post_text:
-            # Add the time before the last hashtag
-            hashtag_pos = post_text.rindex('#')
-            post_text = f"{post_text[:hashtag_pos]} [{current_time}] {post_text[hashtag_pos:]}"
-        else:
-            # Add the time at the end
-            post_text = f"{post_text} [{current_time}]"
+        # Add timestamp to the end of the tweet
+        post_text = f"{post_text} [{current_time}]"
             
-        # Ensure it's still under the character limit
+        # Final check to ensure it's under the limit
         if len(post_text) > 280:
-            post_text = post_text[:277] + '...'
+            post_text = post_text[:276] + " ..."
         
         tweet_id = api_client.post_tweet(x_client, post_text)
         logger.info(f"Posted regular content (type: {content_type}): {post_text[:50]}...")
@@ -127,21 +128,24 @@ def post_session_content(x_client, app_client, xai_headers):
             
             post_text = content_generator.generate_session_post(xai_headers, session)
             
-            # Add uniqueness to prevent duplicate content errors
+            # First trim content to leave room for timestamp
+            # Maximum tweet length is 280 characters
+            # We need to reserve about 11 characters for " [HH:MM]" timestamp format
+            char_limit = 265  # 280 - 15 chars for timestamp and buffer
+            
+            if len(post_text) > char_limit:
+                post_text = post_text[:char_limit]
+            
             # Create a unique timestamp (HH:MM format)
             current_time = datetime.utcnow().strftime('%H:%M')
             
-            # Check if the post already contains a hashtag
-            if '#' in post_text:
-                # Add the time before the last hashtag
-                hashtag_pos = post_text.rindex('#')
-                post_text = f"{post_text[:hashtag_pos]} [{current_time}] {post_text[hashtag_pos:]}"
-            else:
-                # Add the time at the end
-                post_text = f"{post_text} [{current_time}]"
+            # Add timestamp to the end of the tweet
+            post_text = f"{post_text} [{current_time}]"
                 
+            # Final check to ensure it's under the limit
             if len(post_text) > 280:
-                post_text = post_text[:277] + '...'
+                post_text = post_text[:276] + " ..."
+                
             tweet_id = api_client.post_tweet(x_client, post_text)
             logger.info(f"Posted session content for {session.get('user', 'user')}: {post_text[:50]}...")
             return tweet_id
@@ -189,12 +193,28 @@ def engage_with_posts(x_client, xai_headers):
             
             # Cross-posting comment (limit to 10 per week using database counter)
             if not comment_limit_reached:
-                prompt = "Generate a comment for a rucking post, promoting @getrucky, <280 characters."
+                prompt = "Generate a brief comment for a rucking post, promoting @getrucky. IMPORTANT: Keep response UNDER 200 characters total."
                 comment_text = content_generator.get_cached_response(prompt)
                 if not comment_text:
                     comment_text = api_client.generate_text(xai_headers, prompt)
                     content_generator.cache_response(prompt, comment_text)
-                if comment_text and len(comment_text) <= 280:
+                
+                # Create a unique timestamp (HH:MM format)
+                current_time = datetime.utcnow().strftime('%H:%M')
+                
+                # First trim content to leave room for timestamp
+                char_limit = 265  # 280 - 15 chars for timestamp and buffer
+                if comment_text and len(comment_text) > char_limit:
+                    comment_text = comment_text[:char_limit]
+                
+                # Add timestamp for uniqueness
+                if comment_text:
+                    comment_text = f"{comment_text} [{current_time}]"
+                    
+                    # Final check
+                    if len(comment_text) > 280:
+                        comment_text = comment_text[:276] + " ..."
+                    
                     if api_client.reply_to_tweet(x_client, tweet_id, comment_text):
                         engagement_count['commented'] += 1
                         store_engagement_action(tweet_id, 'comment')

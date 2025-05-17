@@ -25,16 +25,23 @@ def main():
         logger.info(f"Generating content with type: {content_type}, theme: {theme}")
         post_text = content_generator.generate_post(xai_headers, content_type, theme)
         
+        # First trim content to leave room for timestamp
+        # Reserve about 20 characters for " [Manual test HH:MM:SS]"
+        char_limit = 255  
+        if len(post_text) > char_limit:
+            post_text = post_text[:char_limit]
+        
         # Add uniqueness
         current_time = datetime.utcnow().strftime('%H:%M:%S')
         post_text = f"Manual test [{current_time}]: {post_text}"
         
-        # Ensure it's within character limit
+        # Final check to ensure it's under the limit
         if len(post_text) > 280:
-            post_text = post_text[:277] + '...'
+            post_text = post_text[:276] + " ..."
         
         # Post tweet
         logger.info(f"Posting tweet: {post_text}")
+        logger.info(f"Tweet length: {len(post_text)} characters")
         tweet_id = api_client.post_tweet(x_client, post_text)
         logger.info(f"Successfully posted tweet with ID: {tweet_id}")
         return True

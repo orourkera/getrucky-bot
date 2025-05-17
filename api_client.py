@@ -361,10 +361,10 @@ def generate_text(headers, prompt):
         payload = {
             "model": "grok-3-beta",
             "messages": [
-                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "system", "content": "You are a helpful assistant. Keep all responses very concise and brief, under 200 characters when possible."},
                 {"role": "user", "content": prompt}
             ],
-            "max_tokens": 280,
+            "max_tokens": 200,
             "temperature": 0.9
         }
         
@@ -377,6 +377,10 @@ def generate_text(headers, prompt):
         
         response.raise_for_status()
         generated_text = response.json()['choices'][0]['message']['content'].strip()
+        
+        # Enforce character limit here as well
+        if len(generated_text) > 200:
+            generated_text = generated_text[:200]
         
         logger.info(f"Successfully generated text with xAI API: {prompt[:30]}...")
         return generated_text
