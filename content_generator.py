@@ -5,7 +5,9 @@ import logging
 import sqlite3
 from datetime import datetime
 import api_client
-from config import CONTENT_WEIGHTS, WEEKLY_THEMES, POST_FREQUENCY
+from config import CONTENT_WEIGHTS, WEEKLY_THEMES, POST_FREQUENCY, MAP_POST_DAYS
+import config
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +19,12 @@ MODEL_CACHE_DB = '/tmp/model_cache.db'
 def select_content_type():
     """Select content type based on weighted probability or weekly theme."""
     current_day = datetime.utcnow().weekday()
+    
+    # On specified map post days, increase chance of map posts
+    if current_day in getattr(config, 'MAP_POST_DAYS', [1, 4]):  # Tuesdays and Fridays by default
+        if random.random() < 0.3:  # 30% chance for map post on these days
+            return 'map_post', None
+    
     if random.random() < 0.2:  # 20% chance to use weekly theme for health benefits posts
         return 'health_benefits', WEEKLY_THEMES[current_day]
     else:
@@ -30,6 +38,23 @@ def select_content_type():
 
 def generate_post(xai_headers, content_type, theme=None):
     """Generate a post based on the specified content type."""
+    # Special case for map posts - we don't use the xAI API for these
+    if content_type == 'map_post':
+        from supabase_client import initialize_supabase_client, get_session_with_map
+        try:
+            supabase_client = initialize_supabase_client()
+            session_data, map_path = get_session_with_map(supabase_client)
+            if session_data and map_path:
+                # We'll return the session data and map path, which will be handled by a separate function
+                return {'session_data': session_data, 'map_path': map_path, 'is_map_post': True}
+            else:
+                logger.warning("Could not generate map post, falling back to health benefits")
+                content_type = 'health_benefits'
+        except Exception as e:
+            logger.error(f"Error generating map post: {e}")
+            content_type = 'health_benefits'
+    
+    # Standard content generation for non-map posts
     prompt = get_prompt_for_content_type(content_type, theme)
     cached_response = get_cached_response(prompt)
     if cached_response and len(cached_response) > 50:
@@ -180,7 +205,9 @@ def get_prompt_for_content_type(content_type, theme=None):
         
         'shoutout': "Generate a motivational shout-out for a rucking achievement with specific details about the accomplishment and encouraging words. IMPORTANT: Keep response UNDER 200 characters total.",
         
-        'ugc': "Create a supportive comment for a user's rucking post with specific feedback about their achievement or effort. IMPORTANT: Keep response UNDER 200 characters total."
+        'ugc': "Create a supportive comment for a user's rucking post with specific feedback about their achievement or effort. IMPORTANT: Keep response UNDER 200 characters total.",
+        
+        'map_post': "Generate a brief caption for a mapped ruck session, highlighting distance, pace, and achievement. IMPORTANT: Keep response UNDER 200 characters total."
     }
 
     # Handle the renamed theme category
@@ -262,4 +289,112 @@ def cache_response(prompt, response):
         return True
     except Exception as e:
         logger.error(f"Error caching response: {e}")
-        return False 
+        return False
+
+def generate_map_post_text(session_data):
+    """Generate text for a map post based on session data."""
+    # Extract data for the tweet
+    distance = session_data.get('distance', '0')
+    duration = session_data.get('duration', '0h')
+    pace = session_data.get('pace', 'N/A')
+    weight = session_data.get('ruck_weight', '0')
+    elevation = session_data.get('elevation_gain', '0')
+    
+    # Try to get location data
+    city = session_data.get('city', "Austin")
+    state = session_data.get('state', "TX")
+    country = session_data.get('country', "USA")
+    
+    # Try to use XAI to generate an insightful observation about the ruck
+    # Only do this if we're not in a testing environment
+    if 'XAI_API_KEY' in os.environ:
+        try:
+            # Format the session data for the prompt
+            session_details = f"""
+            Distance: {distance} miles
+            Duration: {duration}
+            Pace: {pace}/mile
+            Weight: {weight}kg
+            Elevation gain: {elevation}m
+            Location: {city}, {state}, {country}
+            """
+            
+            # Create the prompt for observation
+            prompt = f"""You are a rucking enthusiast and coach analyzing a ruck session. 
+            Make ONE keen, specific observation about this ruck (less than 100 characters):
+            {session_details}
+            
+            Focus on something impressive, unusual, or notable about this specific session.
+            KEEP YOUR OBSERVATION VERY BRIEF."""
+            
+            # Initialize xAI client
+            xai_headers = api_client.initialize_xai_client()
+            
+            # Generate the observation
+            observation = api_client.generate_text(xai_headers, prompt)
+            
+            # Limit the length just to be safe
+            if observation and len(observation) > 100:
+                observation = observation[:97] + "..."
+                
+            logger.info(f"Generated XAI observation: {observation}")
+            
+            # Use the observation in our post
+            if observation:
+                # Create the tweet text with the observation
+                post_text = f"Ruck of the day from {city}, {state}, {country}. {observation}"
+            else:
+                # Fall back to standard format
+                post_text = f"Ruck of the day from {city}, {state}, {country}. Great job rucker!"
+                
+        except Exception as e:
+            logger.error(f"Error generating XAI observation: {e}")
+            # Fall back to standard format
+            post_text = f"Ruck of the day from {city}, {state}, {country}. Great job rucker!"
+    else:
+        # Standard format without XAI
+        post_text = f"Ruck of the day from {city}, {state}, {country}. Great job rucker!"
+    
+    # Format stats for readability with emojis
+    stats_parts = []
+    
+    # Distance with running emoji
+    if distance and float(distance) > 0:
+        stats_parts.append(f"🏃‍♂️ {distance} miles")
+    
+    # Duration with clock emoji
+    if duration and duration != "0h" and duration != "N/A":
+        stats_parts.append(f"⏱️ {duration}")
+    
+    # Weight with backpack emoji
+    if weight and float(weight) > 0:
+        stats_parts.append(f"🎒 {weight}kg")
+    
+    # Pace with lightning emoji if available
+    if pace and pace != "N/A":
+        stats_parts.append(f"⚡ {pace}/mi")
+    
+    # Elevation with mountain emoji if available and significant
+    if elevation and float(elevation) > 10:
+        stats_parts.append(f"⛰️ {elevation}m gain")
+    
+    # Join the stats parts with commas for readability
+    stats = ", ".join(stats_parts)
+    
+    # Combine the required format with the stats
+    combined_text = f"{post_text} {stats}"
+    
+    # Make sure it's under the character limit
+    max_length = 200  # Leave room for timestamps and any additional text
+    if len(combined_text) > max_length:
+        # If we need to truncate, keep the required format intact
+        # and truncate the stats portion
+        extra_chars = len(combined_text) - max_length
+        if len(stats) > extra_chars + 3:  # +3 for ellipsis
+            shortened_stats = stats[:-extra_chars-3] + "..."
+            combined_text = f"{post_text} {shortened_stats}"
+        else:
+            # If stats are too short to meaningfully truncate, just use the main format
+            combined_text = post_text
+    
+    return combined_text 
