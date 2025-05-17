@@ -7,8 +7,8 @@ import sys
 from datetime import datetime
 import api_client
 import content_generator
-from supabase_client import initialize_supabase_client, get_session_with_map, format_session_data, get_location_from_session
-from direct_supabase_query import get_session_by_id, get_recent_sessions, get_session_route_points
+from supabase_client import initialize_supabase_client, get_session_with_map, format_session_data, get_location_from_session, get_session_route_points, generate_map_image
+from direct_supabase_query import get_session_by_id, get_recent_sessions
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -127,6 +127,26 @@ def main():
                 logger.warning("No location data found for this session")
         except Exception as loc_error:
             logger.error(f"Error getting location data: {loc_error}")
+        
+        # Generate a map image for the session
+        map_path = None
+        try:
+            logger.info(f"Generating map for session {session_id}...")
+            
+            # Get route points
+            route_points = get_session_route_points(supabase_client, session_id)
+            if route_points and len(route_points) >= 2:
+                logger.info(f"Found {len(route_points)} route points for map generation")
+                # Generate map image
+                map_path = generate_map_image(route_points, formatted_data)
+                if map_path:
+                    logger.info(f"Generated map image: {map_path}")
+                else:
+                    logger.warning("Failed to generate map image")
+            else:
+                logger.warning(f"Not enough route points to generate map (need at least 2, found {len(route_points) if route_points else 0})")
+        except Exception as map_error:
+            logger.error(f"Error generating map: {map_error}")
             
         # Generate post text
         post_text = content_generator.generate_map_post_text(formatted_data)
@@ -162,7 +182,13 @@ def main():
             return False
         
         # Post the tweet
-        tweet_id = api_client.post_tweet(x_client, post_text)
+        if map_path and os.path.exists(map_path):
+            logger.info(f"Posting tweet with map image: {map_path}")
+            tweet_id = api_client.post_tweet(x_client, post_text, media=map_path)
+        else:
+            logger.info("Posting tweet without map image")
+            tweet_id = api_client.post_tweet(x_client, post_text)
+            
         logger.info(f"Successfully posted tweet with ID: {tweet_id}")
         return True
     except Exception as e:
