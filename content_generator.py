@@ -172,7 +172,7 @@ def get_prompt_for_content_type(content_type, theme=None):
         
         'challenge': f"Generate a {season}-themed rucking challenge that encourages community participation with specific goals and measurable targets, <280 characters.",
         
-        'health_benefits': f"You are an avid outdoorsman, health scientist and researcher. You like data points and factsGenerate a {theme} post about the health and fitness benefits of rucking. Include specific facts, statistics or research data to make it informative. Minimum 100 characters, <280 characters.",
+        'health_benefits': f"You are an avid outdoorsman, health scientist and researcher. You like data points and facts. Generate a {theme} post about the health and fitness benefits of rucking. Include specific facts or statistics. IMPORTANT: Keep response UNDER 280 characters total.",
         
         'poll': "Create an engaging poll about rucking preferences with specific options related to gear, training methods, or favorite locations, <280 characters.",
         
