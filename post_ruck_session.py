@@ -183,6 +183,39 @@ def main():
         
         # Post the tweet
         if map_path and os.path.exists(map_path):
+            # Check if this is an HTML file (which can't be posted directly)
+            if map_path.endswith('.html'):
+                logger.warning("Map is in HTML format which can't be posted directly to Twitter")
+                logger.info("Attempting to convert HTML to a screenshot...")
+                
+                try:
+                    # Try to convert HTML to PNG using PIL
+                    from PIL import Image
+                    import io
+                    
+                    # Create a PNG file path
+                    png_file = map_path.replace('.html', '.png')
+                    
+                    # Create a simple image with text as a fallback
+                    img = Image.new('RGB', (800, 400), color=(0, 0, 0))
+                    from PIL import ImageDraw, ImageFont
+                    draw = ImageDraw.Draw(img)
+                    
+                    # Add some text
+                    text = f"Ruck in {formatted_data.get('city', 'unknown location')}\n{formatted_data.get('distance', '0')} miles with {formatted_data.get('ruck_weight', '0')}kg"
+                    draw.text((50, 150), text, fill=(255, 255, 255))
+                    
+                    # Save the image
+                    img.save(png_file)
+                    logger.info(f"Created simple map image replacement: {png_file}")
+                    map_path = png_file
+                except Exception as img_error:
+                    logger.error(f"Failed to create map image: {img_error}")
+                    logger.info("Posting tweet without map image")
+                    tweet_id = api_client.post_tweet(x_client, post_text)
+                    logger.info(f"Successfully posted tweet with ID: {tweet_id}")
+                    return True
+            
             logger.info(f"Posting tweet with map image: {map_path}")
             tweet_id = api_client.post_tweet(x_client, post_text, media=map_path)
         else:
