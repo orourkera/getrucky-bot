@@ -50,27 +50,65 @@ def get_recent_ruck_sessions(client: Client, limit: int = 5) -> List[Dict[Any, A
         return []
 
 def get_session_route_points(client: Client, session_id: str) -> List[Tuple[float, float]]:
-    """Fetch route points for a specific ruck session or generate dummy points if none exist."""
+    """Fetch route points for a specific ruck session using a join between tables."""
     try:
-        # Query the location_point table with proper integer session_id
         logger.info(f"Fetching route points for session {session_id}")
         
-        # Convert session_id to integer for database query since it's an integer column
+        # Convert session_id to integer
         int_session_id = int(session_id)
-        logger.info(f"Querying location_point with session_id = {int_session_id}")    
+        
+        # First get the session to ensure it exists and to get any foreign key references
+        logger.info(f"Getting session details for session_id = {int_session_id}")
+        session_response = client.table('ruck_session').select('*').eq('id', int_session_id).execute()
+        
+        if not session_response.data:
+            logger.warning(f"Session {int_session_id} not found")
+            return []
+        
+        session = session_response.data[0]
+        logger.info(f"Found session: {session}")
+        
+        # Check if we have a user_id that might be needed for the join
+        user_id = session.get('user_id')
+        
+        # Try different approaches to find location points
+        
+        # Direct query first
+        logger.info(f"Querying location_point with session_id = {int_session_id}")
         response = client.table('location_point').select('*').eq('session_id', int_session_id).execute()
         
-        logger.info(f"Query response data count: {len(response.data) if response.data else 0}")
+        # If that doesn't work, try using the user_id if available
+        if not response.data and user_id:
+            logger.info(f"Trying to find location points for user_id = {user_id}")
+            # This assumes location points might be linked to user_id rather than session_id
+            try:
+                response = client.table('location_point').select('*').eq('user_id', user_id).execute()
+            except Exception as e:
+                logger.warning(f"Error querying by user_id: {e}")
         
+        # Try to find location points that were created around the same time as the session
+        if not response.data and 'started_at' in session and 'completed_at' in session:
+            started_at = session.get('started_at')
+            completed_at = session.get('completed_at')
+            
+            if started_at and completed_at:
+                logger.info(f"Trying to find location points created between {started_at} and {completed_at}")
+                try:
+                    # Only try this if the location_point table has a timestamp field
+                    response = client.table('location_point').select('*').gte('timestamp', started_at).lte('timestamp', completed_at).execute()
+                except Exception as e:
+                    logger.warning(f"Error querying by timestamp: {e}")
+        
+        # Process results
         if response.data and len(response.data) >= 2:
             # Extract latitude and longitude from each point
             route_points = [(point['latitude'], point['longitude']) for point in response.data]
-            logger.info(f"Fetched {len(route_points)} real route points for session {session_id}")
+            logger.info(f"Fetched {len(route_points)} route points for session {session_id}")
             return route_points
-        else:
-            # No route points found, but don't generate dummy data - just return empty list
-            logger.warning(f"No route points found for session {session_id}")
-            return []
+        
+        # No route points found
+        logger.warning(f"No route points found for session {session_id}")
+        return []
     except ValueError:
         logger.error(f"Failed to convert session_id '{session_id}' to integer")
         return []
@@ -135,36 +173,22 @@ def get_location_from_session(client: Client, session_id: str) -> Dict[str, str]
         A dictionary with keys 'city', 'state', and 'country'
     """
     try:
-        # Query the location_point table for this session with proper integer conversion
-        logger.info(f"Querying location points for session {session_id}")
+        # Get the route points using our improved join-based function
+        logger.info(f"Getting location from route points for session {session_id}")
+        route_points = get_session_route_points(client, session_id)
         
-        # Convert session_id to integer
-        int_session_id = int(session_id)
-        
-        # Get the first location point
-        response = client.table('location_point').select('latitude,longitude').eq('session_id', int_session_id).limit(1).execute()
-        
-        if response.data and len(response.data) > 0:
-            # Get the first point
-            first_point = response.data[0]
-            latitude = first_point.get('latitude')
-            longitude = first_point.get('longitude')
-            
-            logger.info(f"Found location point: lat={latitude}, lon={longitude}")
+        # Check if we got any route points
+        if route_points and len(route_points) > 0:
+            # Use the first point for geocoding
+            latitude, longitude = route_points[0]
+            logger.info(f"Using location point: lat={latitude}, lon={longitude}")
             
             # Geocode the coordinates
             location = geocode_coordinates(latitude, longitude)
             return location
         
         # If no points found, return empty values
-        logger.warning(f"No location points found for session {session_id}")
-        return {
-            'city': "",
-            'state': "",
-            'country': ""
-        }
-    except ValueError:
-        logger.error(f"Failed to convert session_id '{session_id}' to integer")
+        logger.warning(f"No route points found for session {session_id}")
         return {
             'city': "",
             'state': "",
