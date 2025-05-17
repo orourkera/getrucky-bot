@@ -6,7 +6,7 @@ import sqlite3
 import os
 from datetime import datetime
 import api_client
-from config import CONTENT_WEIGHTS, WEEKLY_THEMES, POST_FREQUENCY, MAP_POST_DAYS
+from config import CONTENT_WEIGHTS, WEEKLY_THEMES, POST_FREQUENCY
 import config
 
 logger = logging.getLogger(__name__)
