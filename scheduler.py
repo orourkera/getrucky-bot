@@ -12,14 +12,31 @@ logger = logging.getLogger(__name__)
 
 
 def schedule_posts(scheduler, x_client, app_client, xai_headers):
-    """Schedule regular and session-based posts for the day."""
+    """Schedule regular and session-based posts for the day, ensuring one map post attempt."""
     try:
         num_posts = random.choice(POST_FREQUENCY)  # Randomly select number of posts (5-10)
         selected_times = get_post_times()[:num_posts]
         
-        # Schedule regular content posts (3-8)
-        regular_posts = max(3, num_posts - 2)  # Ensure at least 3 regular posts, reserve 2 for session posts if possible
-        for i, time_tuple in enumerate(selected_times[:regular_posts]):
+        if not selected_times:
+            logger.warning("No post times generated, cannot schedule posts.")
+            return
+
+        # Ensure at least one post is dedicated to a session/map post attempt
+        dedicated_map_post_time = selected_times.pop(0) # Take the earliest time for the map post
+        hour, minute = dedicated_map_post_time
+        scheduler.add_job(
+            post_session_content, # This function handles map posts if session data is available
+            'cron',
+            hour=hour,
+            minute=minute,
+            args=[x_client, app_client, xai_headers],
+            id=f'dedicated_map_post_{hour}_{minute}'
+        )
+        logger.info(f"Scheduled dedicated session/map post attempt at {hour}:{minute:02d} UTC")
+        
+        # Schedule remaining posts as regular content (can include other session posts via select_content_type)
+        # num_posts is already reduced by 1 due to pop()
+        for i, time_tuple in enumerate(selected_times): # Iterate through the remaining times
             hour, minute = time_tuple
             scheduler.add_job(
                 post_regular_content,
@@ -27,26 +44,11 @@ def schedule_posts(scheduler, x_client, app_client, xai_headers):
                 hour=hour,
                 minute=minute,
                 args=[x_client, xai_headers],
-                id=f'regular_post_{hour}_{minute}'
+                id=f'regular_post_{hour}_{minute}_{i}' # Ensure unique ID
             )
             logger.info(f"Scheduled regular post at {hour}:{minute:02d} UTC")
         
-        # Schedule session-based posts (2-3 if possible)
-        session_posts = min(3, num_posts - regular_posts + 2)  # Aim for 2-3 session posts
-        session_times = selected_times[regular_posts:regular_posts + session_posts]
-        for i, time_tuple in enumerate(session_times):
-            hour, minute = time_tuple
-            scheduler.add_job(
-                post_session_content,
-                'cron',
-                hour=hour,
-                minute=minute,
-                args=[x_client, app_client, xai_headers],
-                id=f'session_post_{hour}_{minute}_{i}'
-            )
-            logger.info(f"Scheduled session post at {hour}:{minute:02d} UTC")
-        
-        logger.info(f"Scheduled {num_posts} total posts for the day")
+        logger.info(f"Scheduled {num_posts} total posts for the day (including one dedicated session/map attempt)")
     except Exception as e:
         logger.error(f"Error scheduling posts: {e}")
 
