@@ -300,10 +300,20 @@ def generate_map_post_text(session_data):
     weight = session_data.get('ruck_weight', '0')
     elevation = session_data.get('elevation_gain', '0')
     
-    # Get location data from session
-    city = session_data.get('city', "Austin")
-    state = session_data.get('state', "TX")
-    country = session_data.get('country', "USA")
+    # Get location data from session - don't use defaults
+    city = session_data.get('city', '')
+    state = session_data.get('state', '')
+    country = session_data.get('country', '')
+    
+    location_text = ""
+    if city and state and country:
+        location_text = f"Ruck of the day from {city}, {state}, {country}. "
+    elif city and country:
+        location_text = f"Ruck of the day from {city}, {country}. "
+    elif city:
+        location_text = f"Ruck of the day from {city}. "
+    else:
+        location_text = "Ruck of the day. "
     
     # Try to use XAI to generate an insightful observation about the ruck
     # Only do this if we're not in a testing environment
@@ -342,18 +352,18 @@ def generate_map_post_text(session_data):
             # Use the observation in our post
             if observation:
                 # Create the tweet text with the observation
-                post_text = f"Ruck of the day from {city}, {state}, {country}. {observation}"
+                post_text = f"{location_text}{observation}"
             else:
-                # Fall back to standard format
-                post_text = f"Ruck of the day from {city}, {state}, {country}. Great job rucker!"
+                # Fall back to standard format without observation
+                post_text = f"{location_text}Great job rucker!"
                 
         except Exception as e:
             logger.error(f"Error generating XAI observation: {e}")
-            # Fall back to standard format
-            post_text = f"Ruck of the day from {city}, {state}, {country}. Great job rucker!"
+            # Fall back to standard format without observation
+            post_text = f"{location_text}Great job rucker!"
     else:
         # Standard format without XAI
-        post_text = f"Ruck of the day from {city}, {state}, {country}. Great job rucker!"
+        post_text = f"{location_text}Great job rucker!"
     
     # Format stats for readability with emojis
     stats_parts = []

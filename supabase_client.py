@@ -140,16 +140,16 @@ def geocode_coordinates(latitude: float, longitude: float) -> Dict[str, str]:
         logger.info(f"Geocoded coordinates ({latitude}, {longitude}) to {city}, {state}, {country}")
         
         return {
-            'city': city or "Unknown City",
-            'state': state or "Unknown State",
-            'country': country or "Unknown Country"
+            'city': city or "",
+            'state': state or "",
+            'country': country or ""
         }
     except Exception as e:
         logger.error(f"Error geocoding coordinates: {e}")
         return {
-            'city': "Austin",  # Default fallback
-            'state': "TX",
-            'country': "USA"
+            'city': "",
+            'state': "",
+            'country': ""
         }
 
 def get_location_from_session(client: Client, session_id: str) -> Dict[str, str]:
@@ -171,11 +171,11 @@ def get_location_from_session(client: Client, session_id: str) -> Dict[str, str]
             int_session_id = int(session_id)
         except (ValueError, TypeError):
             logger.error(f"Failed to convert session_id '{session_id}' to integer")
-            # Return default if conversion fails
+            # Return empty location if conversion fails
             return {
-                'city': "Austin",
-                'state': "TX",
-                'country': "USA"
+                'city': "",
+                'state': "",
+                'country': ""
             }
             
         response = client.table('location_point').select('latitude,longitude').eq('session_id', int_session_id).limit(1).execute()
@@ -193,19 +193,19 @@ def get_location_from_session(client: Client, session_id: str) -> Dict[str, str]
                 location = geocode_coordinates(latitude, longitude)
                 return location
         
-        # If no points or geocoding failed, return defaults
-        logger.warning(f"No location points found for session {session_id}, using default location")
+        # If no points or geocoding failed, return empty values
+        logger.warning(f"No location points found for session {session_id}")
         return {
-            'city': "Austin",
-            'state': "TX",
-            'country': "USA"
+            'city': "",
+            'state': "",
+            'country': ""
         }
     except Exception as e:
         logger.error(f"Error getting location for session {session_id}: {e}")
         return {
-            'city': "Austin",
-            'state': "TX",
-            'country': "USA"
+            'city': "",
+            'state': "",
+            'country': ""
         }
 
 def generate_map_image(route_points: List[Tuple[float, float]], session_data: Dict[Any, Any]) -> Optional[str]:
