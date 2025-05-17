@@ -305,62 +305,82 @@ def generate_map_post_text(session_data):
     state = session_data.get('state', '')
     country = session_data.get('country', '')
     
-    location_text = ""
-    if city and state and country:
-        location_text = f"Ruck of the day from {city}, {state}, {country}. "
-    elif city and country:
-        location_text = f"Ruck of the day from {city}, {country}. "
-    elif city:
-        location_text = f"Ruck of the day from {city}. "
-    else:
-        location_text = "Ruck of the day. "
-    
-    # Try to use XAI to generate an insightful observation about the ruck
-    # Only do this if we're not in a testing environment
-    if 'XAI_API_KEY' in os.environ:
+    post_text = ""
+
+    if 'XAI_API_KEY' in os.environ or 'GROQ_API_KEY' in os.environ:
         try:
-            # Format the session data for the prompt
-            session_details = f"""
-            Distance: {distance} miles
-            Duration: {duration}
-            Pace: {pace}/mile
-            Weight: {weight}kg
-            Elevation gain: {elevation}m
-            Location: {city}, {state}, {country}
-            """
-            
-            # Create the prompt for observation
-            prompt = f"""You are a rucking enthusiast and coach analyzing a ruck session. 
-            Make ONE keen, specific observation about this ruck (less than 100 characters):
-            {session_details}
-            
-            Focus on something impressive, unusual, or notable about this specific session.
-            KEEP YOUR OBSERVATION VERY BRIEF."""
-            
-            # Initialize xAI client
-            xai_headers = api_client.initialize_xai_client()
-            
-            # Generate the observation
-            observation = api_client.generate_text(xai_headers, prompt)
-                
-            logger.info(f"Generated XAI observation: {observation}")
-            
-            # Use the observation in our post
-            if observation:
-                # Create the tweet text with the observation
-                post_text = f"{location_text}{observation}"
+            session_details_for_prompt = f"""
+Distance: {distance} miles
+Duration: {duration}
+Pace: {pace}/mile
+Weight: {weight}kg
+Elevation gain: {elevation}m"""
+
+            location_string_for_prompt = ""
+            if city and state and country:
+                location_string_for_prompt = f"{city}, {state}, {country}"
+            elif city and country:
+                location_string_for_prompt = f"{city}, {country}"
+            elif city:
+                location_string_for_prompt = f"{city}"
             else:
-                # Fall back to standard format without observation
-                post_text = f"{location_text}Great job rucker!"
-                
+                location_string_for_prompt = "an awesome spot"
+
+            # Adjust example location for prompt clarity if it's the generic fallback
+            example_location_display = location_string_for_prompt
+            if location_string_for_prompt == "an awesome spot":
+                example_location_display = "the great outdoors"
+
+            prompt = f"""You are a rucking enthusiast and coach. Write a short, engaging tweet (around 140-160 characters before stats are added) about the following ruck session.
+Your tweet should start by naturally mentioning the location: '{location_string_for_prompt}'.
+Then, make ONE keen, specific observation about this ruck.
+Session details:
+{session_details_for_prompt}
+
+Focus on something impressive, unusual, or notable. Keep the tone enthusiastic and inspiring. End with a relevant hashtag like #GetRucky, #RuckLife or #Rucking.
+Example for a known location: 'Solid {distance}-mile ruck through {example_location_display}! That {weight}kg pack is no joke. Great discipline! #GetRucky'
+Example for an unknown location: 'Kicking off the day with a Ruck of the day from an awesome spot! {distance} miles logged. That commitment is inspiring! #RuckLife'
+Output ONLY the tweet text (commentary, observation, and one hashtag), ready for detailed stats (like 🏃‍♂️, ⏱️ etc.) to be appended by the system.
+"""
+
+            logger.info(f"XAI Prompt for map post: {prompt}")
+            xai_headers = api_client.initialize_xai_client()
+            generated_text = api_client.generate_text(xai_headers, prompt)
+
+            logger.info(f"Generated XAI text for map post: {generated_text}")
+
+            if generated_text and len(generated_text) > 10:
+                post_text = generated_text.strip()
+            else:
+                logger.warning("XAI generation failed or response too short, using fallback.")
+                default_location_intro = "Ruck of the day"
+                if location_string_for_prompt != "an awesome spot":
+                    default_location_intro = f"Ruck of the day from {location_string_for_prompt}."
+                post_text = f"{default_location_intro} Showing some serious dedication! #GetRucky"
+
         except Exception as e:
-            logger.error(f"Error generating XAI observation: {e}")
-            # Fall back to standard format without observation
-            post_text = f"{location_text}Great job rucker!"
+            logger.error(f"Error generating XAI text for map post: {e}")
+            default_location_intro = "Ruck of the day"
+            if city:
+                location_string_fallback = f"{city}, {state}, {country}" if city and state and country else f"{city}, {country}" if city and country else city
+                if location_string_fallback:
+                    default_location_intro = f"Ruck of the day from {location_string_fallback}."
+            post_text = f"{default_location_intro} Pushing limits and loving it! #GetRucky"
     else:
-        # Standard format without XAI
-        post_text = f"{location_text}Great job rucker!"
-    
+        logger.warning("XAI_API_KEY or GROQ_API_KEY not in environment, using fallback for map post text.")
+        default_location_intro = "Ruck of the day"
+        location_string_for_fallback = ""
+        if city and state and country:
+            location_string_for_fallback = f"{city}, {state}, {country}"
+        elif city and country:
+            location_string_for_fallback = f"{city}, {country}"
+        elif city:
+            location_string_for_fallback = f"{city}"
+
+        if location_string_for_fallback:
+            default_location_intro = f"Ruck of the day from {location_string_for_fallback}."
+        post_text = f"{default_location_intro} Another session in the books! #GetRucky"
+
     # Format stats for readability with emojis
     stats_parts = []
     
