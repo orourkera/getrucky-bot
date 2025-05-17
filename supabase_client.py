@@ -351,6 +351,11 @@ def generate_map_image(route_points: List[Tuple[float, float]], session_data: Di
                 chrome_options.add_argument("--no-sandbox")
                 chrome_options.add_argument("--disable-dev-shm-usage")
                 
+                # Add a unique user data directory to prevent conflicts
+                user_data_dir = os.path.join(tempfile.gettempdir(), f"chrome_user_data_{timestamp}")
+                os.makedirs(user_data_dir, exist_ok=True)
+                chrome_options.add_argument(f"--user-data-dir={user_data_dir}")
+                
                 # Set browser window size for the image
                 chrome_options.add_argument("--window-size=1200,800")
                 
