@@ -300,7 +300,7 @@ def generate_map_post_text(session_data):
     weight = session_data.get('ruck_weight', '0')
     elevation = session_data.get('elevation_gain', '0')
     
-    # Try to get location data
+    # Get location data from session
     city = session_data.get('city', "Austin")
     state = session_data.get('state', "TX")
     country = session_data.get('country', "USA")

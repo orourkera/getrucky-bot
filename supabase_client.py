@@ -96,6 +96,92 @@ def get_session_route_points(client: Client, session_id: str) -> List[Tuple[floa
         ]
         return dummy_points
 
+def geocode_coordinates(latitude: float, longitude: float) -> Dict[str, str]:
+    """Geocode coordinates to get city, state, country using a free geocoding API.
+    
+    Args:
+        latitude: The latitude coordinate
+        longitude: The longitude coordinate
+        
+    Returns:
+        A dictionary with keys 'city', 'state', and 'country'
+    """
+    try:
+        # Use the free OpenStreetMap Nominatim API for geocoding
+        # Rate limit is 1 request per second, which is fine for our use case
+        url = f"https://nominatim.openstreetmap.org/reverse?lat={latitude}&lon={longitude}&format=json"
+        
+        headers = {
+            "User-Agent": "GetruckyBot/1.0",  # Nominatim requires a User-Agent
+            "Accept-Language": "en-US,en"  # Get English names
+        }
+        
+        response = requests.get(url, headers=headers, timeout=5)
+        response.raise_for_status()
+        
+        result = response.json()
+        
+        # Extract location components
+        address = result.get('address', {})
+        city = address.get('city', address.get('town', address.get('village', address.get('hamlet', ''))))
+        state = address.get('state', '')
+        country = address.get('country', '')
+        
+        logger.info(f"Geocoded coordinates ({latitude}, {longitude}) to {city}, {state}, {country}")
+        
+        return {
+            'city': city or "Unknown City",
+            'state': state or "Unknown State",
+            'country': country or "Unknown Country"
+        }
+    except Exception as e:
+        logger.error(f"Error geocoding coordinates: {e}")
+        return {
+            'city': "Austin",  # Default fallback
+            'state': "TX",
+            'country': "USA"
+        }
+
+def get_location_from_session(client: Client, session_id: str) -> Dict[str, str]:
+    """Get the location (city, state, country) for a ruck session using the first route point.
+    
+    Args:
+        client: The Supabase client
+        session_id: The session ID to get location for
+        
+    Returns:
+        A dictionary with keys 'city', 'state', and 'country'
+    """
+    try:
+        # Query the location_point table for this session
+        response = client.table('location_point').select('latitude,longitude').eq('session_id', session_id).limit(1).execute()
+        
+        if response.data and len(response.data) > 0:
+            # Get the first point
+            first_point = response.data[0]
+            latitude = first_point.get('latitude')
+            longitude = first_point.get('longitude')
+            
+            if latitude and longitude:
+                # Geocode the coordinates
+                location = geocode_coordinates(latitude, longitude)
+                return location
+        
+        # If no points or geocoding failed, return defaults
+        logger.warning(f"No location points found for session {session_id}, using default location")
+        return {
+            'city': "Austin",
+            'state': "TX",
+            'country': "USA"
+        }
+    except Exception as e:
+        logger.error(f"Error getting location for session {session_id}: {e}")
+        return {
+            'city': "Austin",
+            'state': "TX",
+            'country': "USA"
+        }
+
 def generate_map_image(route_points: List[Tuple[float, float]], session_data: Dict[Any, Any]) -> Optional[str]:
     """Generate a map image from route points using Folium and return the path to the saved image."""
     if not route_points or len(route_points) < 2:
@@ -288,8 +374,16 @@ def get_session_with_map(client: Client, session_id: Optional[str] = None) -> Tu
             session_data = response.data[0]
             session_id = session_data['id']
         
+        # Get location information
+        location = get_location_from_session(client, session_id)
+        
         # Format the session data
         formatted_data = format_session_data(session_data)
+        
+        # Add location data to formatted_data
+        formatted_data['city'] = location['city']
+        formatted_data['state'] = location['state']
+        formatted_data['country'] = location['country']
         
         # Get route points
         route_points = get_session_route_points(client, session_id)
