@@ -52,15 +52,12 @@ def get_recent_ruck_sessions(client: Client, limit: int = 5) -> List[Dict[Any, A
 def get_session_route_points(client: Client, session_id: str) -> List[Tuple[float, float]]:
     """Fetch route points for a specific ruck session or generate dummy points if none exist."""
     try:
-        # Query the location_point table, ensuring session_id is converted to integer
+        # Query the location_point table with proper integer session_id
         logger.info(f"Fetching route points for session {session_id}")
+        
         # Convert session_id to integer for database query since it's an integer column
-        try:
-            int_session_id = int(session_id)
-        except (ValueError, TypeError):
-            logger.error(f"Failed to convert session_id '{session_id}' to integer")
-            return []
-            
+        int_session_id = int(session_id)
+        logger.info(f"Querying location_point with session_id = {int_session_id}")    
         response = client.table('location_point').select('*').eq('session_id', int_session_id).execute()
         
         logger.info(f"Query response data count: {len(response.data) if response.data else 0}")
@@ -71,40 +68,15 @@ def get_session_route_points(client: Client, session_id: str) -> List[Tuple[floa
             logger.info(f"Fetched {len(route_points)} real route points for session {session_id}")
             return route_points
         else:
-            logger.warning(f"No route points found for session {session_id}, generating dummy route")
-            # Generate dummy route points based on Central Park, NYC
-            dummy_points = [
-                (40.767, -73.9761),
-                (40.7702, -73.9745),
-                (40.7736, -73.9732),
-                (40.7764, -73.9719),
-                (40.7804, -73.9684),
-                (40.7829, -73.9652),
-                (40.7818, -73.9625),
-                (40.7777, -73.9647),
-                (40.7741, -73.9677),
-                (40.7705, -73.9710),
-                (40.767, -73.9761)
-            ]
-            return dummy_points
+            # No route points found, but don't generate dummy data - just return empty list
+            logger.warning(f"No route points found for session {session_id}")
+            return []
+    except ValueError:
+        logger.error(f"Failed to convert session_id '{session_id}' to integer")
+        return []
     except Exception as e:
         logger.error(f"Error fetching route points for session {session_id}: {e}")
-        logger.warning("Returning dummy route points due to error")
-        # Return dummy points on error
-        dummy_points = [
-            (40.767, -73.9761),
-            (40.7702, -73.9745),
-            (40.7736, -73.9732),
-            (40.7764, -73.9719),
-            (40.7804, -73.9684),
-            (40.7829, -73.9652),
-            (40.7818, -73.9625),
-            (40.7777, -73.9647),
-            (40.7741, -73.9677),
-            (40.7705, -73.9710),
-            (40.767, -73.9761)
-        ]
-        return dummy_points
+        return []
 
 def geocode_coordinates(latitude: float, longitude: float) -> Dict[str, str]:
     """Geocode coordinates to get city, state, country using a free geocoding API.
@@ -163,21 +135,13 @@ def get_location_from_session(client: Client, session_id: str) -> Dict[str, str]
         A dictionary with keys 'city', 'state', and 'country'
     """
     try:
-        # Query the location_point table for this session, converting session_id to integer
+        # Query the location_point table for this session with proper integer conversion
         logger.info(f"Querying location points for session {session_id}")
         
-        # Convert session_id to integer for database query since it's an integer column
-        try:
-            int_session_id = int(session_id)
-        except (ValueError, TypeError):
-            logger.error(f"Failed to convert session_id '{session_id}' to integer")
-            # Return empty location if conversion fails
-            return {
-                'city': "",
-                'state': "",
-                'country': ""
-            }
-            
+        # Convert session_id to integer
+        int_session_id = int(session_id)
+        
+        # Get the first location point
         response = client.table('location_point').select('latitude,longitude').eq('session_id', int_session_id).limit(1).execute()
         
         if response.data and len(response.data) > 0:
@@ -188,13 +152,19 @@ def get_location_from_session(client: Client, session_id: str) -> Dict[str, str]
             
             logger.info(f"Found location point: lat={latitude}, lon={longitude}")
             
-            if latitude and longitude:
-                # Geocode the coordinates
-                location = geocode_coordinates(latitude, longitude)
-                return location
+            # Geocode the coordinates
+            location = geocode_coordinates(latitude, longitude)
+            return location
         
-        # If no points or geocoding failed, return empty values
+        # If no points found, return empty values
         logger.warning(f"No location points found for session {session_id}")
+        return {
+            'city': "",
+            'state': "",
+            'country': ""
+        }
+    except ValueError:
+        logger.error(f"Failed to convert session_id '{session_id}' to integer")
         return {
             'city': "",
             'state': "",
