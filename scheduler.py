@@ -75,6 +75,20 @@ def post_regular_content(x_client, xai_headers):
             post_text = content_generator.get_random_template('post', content_type)
             logger.warning(f"Using template fallback for {content_type} post due to xAI API error")
         
+        # Add uniqueness to prevent duplicate content errors
+        # Create a unique timestamp (HH:MM format)
+        current_time = datetime.utcnow().strftime('%H:%M')
+        
+        # Check if the post already contains a hashtag
+        if '#' in post_text:
+            # Add the time before the last hashtag
+            hashtag_pos = post_text.rindex('#')
+            post_text = f"{post_text[:hashtag_pos]} [{current_time}] {post_text[hashtag_pos:]}"
+        else:
+            # Add the time at the end
+            post_text = f"{post_text} [{current_time}]"
+            
+        # Ensure it's still under the character limit
         if len(post_text) > 280:
             post_text = post_text[:277] + '...'
         
@@ -112,6 +126,20 @@ def post_session_content(x_client, app_client, xai_headers):
                 session['streak'] = '0'
             
             post_text = content_generator.generate_session_post(xai_headers, session)
+            
+            # Add uniqueness to prevent duplicate content errors
+            # Create a unique timestamp (HH:MM format)
+            current_time = datetime.utcnow().strftime('%H:%M')
+            
+            # Check if the post already contains a hashtag
+            if '#' in post_text:
+                # Add the time before the last hashtag
+                hashtag_pos = post_text.rindex('#')
+                post_text = f"{post_text[:hashtag_pos]} [{current_time}] {post_text[hashtag_pos:]}"
+            else:
+                # Add the time at the end
+                post_text = f"{post_text} [{current_time}]"
+                
             if len(post_text) > 280:
                 post_text = post_text[:277] + '...'
             tweet_id = api_client.post_tweet(x_client, post_text)
