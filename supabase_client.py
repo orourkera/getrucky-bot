@@ -217,15 +217,16 @@ def generate_map_image(route_points: List[Tuple[float, float]], session_data: Di
         m = folium.Map(
             location=[center_lat, center_lng], 
             zoom_start=14,
-            tiles='CartoDB dark_matter'  # Use a dark theme for better visualization
+            tiles='https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+            attr='Map data: &copy; OpenStreetMap contributors, SRTM | Map style: &copy; OpenTopoMap (CC-BY-SA)'
         )
         
         # Add custom route line with a more visible style
         folium.PolyLine(
             route_points,
-            color='#00FFFF',  # Cyan - highly visible on dark background
-            weight=6,          # Thicker line
-            opacity=0.9,
+            color='#FF0000',  # Bright Red - good contrast on topo maps
+            weight=5,          # Slightly thinner than before
+            opacity=0.8,
             dash_array=None    # Solid line for better visibility
         ).add_to(m)
         
@@ -275,21 +276,21 @@ def generate_map_image(route_points: List[Tuple[float, float]], session_data: Di
             bottom: 30px; 
             left: 10px; 
             z-index: 1000;
-            background-color: rgba(0, 0, 0, 0.8);
-            color: white;
-            padding: 15px;
+            background-color: rgba(255, 255, 255, 0.85); /* Lighter background for topo */
+            color: #333333; /* Darker text for lighter background */
+            padding: 10px;
             border-radius: 8px;
             font-family: Arial;
-            font-size: 14px;
-            width: 220px;
-            box-shadow: 0 3px 10px rgba(0,0,0,0.5);
-            border-left: 4px solid #00FFFF;
+            font-size: 13px; /* Slightly smaller font */
+            width: 200px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            border-left: 4px solid #FF0000; /* Red accent to match route */
         ">
-            <h4 style="margin: 0 0 10px 0; color: #00FFFF; font-size: 16px;">Ruck Stats</h4>
-            <div style="margin-bottom: 5px;">🏃‍♂️ <b>Distance:</b> {distance} miles</div>
-            <div style="margin-bottom: 5px;">⏱️ <b>Duration:</b> {duration}</div>
-            <div style="margin-bottom: 5px;">⚡ <b>Pace:</b> {pace}/mi</div>
-            <div style="margin-bottom: 5px;">🎒 <b>Weight:</b> {ruck_weight}kg</div>
+            <h4 style="margin: 0 0 8px 0; color: #D20000; font-size: 15px;">Ruck Stats</h4>
+            <div style="margin-bottom: 4px;">🏃‍♂️ <b>Distance:</b> {distance} miles</div>
+            <div style="margin-bottom: 4px;">⏱️ <b>Duration:</b> {duration}</div>
+            <div style="margin-bottom: 4px;">⚡ <b>Pace:</b> {pace}/mi</div>
+            <div style="margin-bottom: 4px;">🎒 <b>Weight:</b> {ruck_weight}kg</div>
             {f'<div>⛰️ <b>Elevation:</b> {elevation_gain}m</div>' if float(elevation_gain) > 0 else ''}
         </div>
         """
@@ -305,13 +306,14 @@ def generate_map_image(route_points: List[Tuple[float, float]], session_data: Di
             left: 50%;
             transform: translateX(-50%);
             z-index: 1000;
-            background-color: rgba(0, 0, 0, 0.7);
-            color: white;
-            padding: 10px 20px;
+            background-color: rgba(255, 255, 255, 0.8); /* Lighter background for topo */
+            color: #333333; /* Darker text for lighter background */
+            padding: 8px 15px;
             border-radius: 20px;
             font-family: Arial;
-            font-size: 16px;
+            font-size: 15px;
             text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
         ">
             <b>@getrucky</b> | Ruck Session Map
         </div>
