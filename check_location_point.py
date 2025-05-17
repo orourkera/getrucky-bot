@@ -1,76 +1,87 @@
 #!/usr/bin/env python
-# check_location_point.py - Script to check the location_point table structure
+# check_location_point.py - Script to check location points for sessions
 
 import logging
+import sys
 import os
-from supabase import create_client
+from supabase_client import initialize_supabase_client, get_location_from_session, geocode_coordinates
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def main():
-    """Check the structure of the location_point table."""
+def check_location_points(session_id=None):
+    """Check location points for a specific session ID or sample from the database."""
     try:
-        # Get Supabase credentials
-        supabase_url = os.getenv('SUPABASE_URL')
-        supabase_key = os.getenv('SUPABASE_KEY')
-        
-        if not supabase_url or not supabase_key:
-            logger.error("Missing Supabase credentials.")
-            return False
-        
         # Initialize Supabase client
-        logger.info(f"Connecting to Supabase at: {supabase_url}")
-        supabase = create_client(supabase_url, supabase_key)
+        logger.info("Initializing Supabase client...")
+        supabase_client = initialize_supabase_client()
         
-        # First try to get all column names without filtering or ordering
-        logger.info("Checking location_point table basic query...")
-        try:
-            response = supabase.table('location_point').select('*').limit(1).execute()
-            logger.info(f"Basic query response: {response.data}")
-        except Exception as e:
-            logger.error(f"Error on basic query: {e}")
+        # Use provided session ID or list some samples
+        if not session_id and len(sys.argv) > 1:
+            session_id = sys.argv[1]
         
-        # Try with various session IDs
-        session_ids = [641, 642, 643, 647]
-        for session_id in session_ids:
-            logger.info(f"Querying location_point for session_id = {session_id}")
-            try:
-                response = supabase.table('location_point').select('*').eq('session_id', session_id).execute()
+        if session_id:
+            logger.info(f"Checking location points for session ID: {session_id}")
+            # Query the location_point table for this session
+            str_session_id = str(session_id)
+            response = supabase_client.table('location_point').select('*').eq('session_id', str_session_id).limit(5).execute()
+            
+            if not response.data:
+                logger.warning(f"No location points found for session {session_id}")
+                return False
                 
-                if response.data:
-                    logger.info(f"Found {len(response.data)} location points")
-                    # Print column names from the first record
-                    logger.info(f"Location point columns: {list(response.data[0].keys())}")
-                    # Print first record
-                    logger.info(f"First record: {response.data[0]}")
-                    return True
-                else:
-                    logger.info(f"No location points found for session {session_id}")
-            except Exception as e:
-                logger.error(f"Error querying location_point for session {session_id}: {e}")
+            logger.info(f"Found {len(response.data)} location points for session {session_id}")
+            for i, point in enumerate(response.data[:5]):
+                logger.info(f"Point {i+1}: lat={point.get('latitude')}, lon={point.get('longitude')}")
+                
+            # Try geocoding the first point
+            first_point = response.data[0]
+            latitude = first_point.get('latitude')
+            longitude = first_point.get('longitude')
+            
+            if latitude and longitude:
+                logger.info(f"Geocoding coordinates: {latitude}, {longitude}")
+                location = geocode_coordinates(latitude, longitude)
+                logger.info(f"Geocoded location: {location}")
+            
+            # Use the get_location_from_session function
+            logger.info(f"Using get_location_from_session for session {session_id}...")
+            location = get_location_from_session(supabase_client, session_id)
+            logger.info(f"Result from get_location_from_session: {location}")
+        else:
+            # Sample some sessions with location points
+            logger.info("Listing sample sessions with location points...")
+            response = supabase_client.table('location_point').select('session_id').order('created_at', desc=True).limit(10).execute()
+            
+            if not response.data:
+                logger.warning("No location points found in the database")
+                return False
+                
+            session_ids = list(set([point.get('session_id') for point in response.data if point.get('session_id')]))
+            logger.info(f"Sessions with location points: {session_ids}")
+            
+            # Get some sample coordinates for testing geocoding
+            logger.info("Testing geocoding with sample coordinates...")
+            test_coordinates = [
+                (40.7128, -74.0060),  # New York
+                (51.5074, -0.1278),   # London
+                (35.6762, 139.6503),  # Tokyo
+                (48.8566, 2.3522)     # Paris
+            ]
+            
+            for lat, lon in test_coordinates:
+                logger.info(f"Geocoding test coordinates: {lat}, {lon}")
+                location = geocode_coordinates(lat, lon)
+                logger.info(f"Geocoded location: {location}")
         
-        # If basic queries fail, try to check the table existence and its columns
-        logger.info("Trying to get table structure information...")
-        try:
-            query = """
-            SELECT column_name FROM information_schema.columns 
-            WHERE table_schema = 'public' AND table_name = 'location_point';
-            """
-            response = supabase.rpc('run_sql_query', {'query': query}).execute()
-            logger.info(f"Column info response: {response.data}")
-        except Exception as e:
-            logger.error(f"Error getting column info: {e}")
-        
-        logger.warning("Could not determine location_point table structure")
-        return False
+        return True
     except Exception as e:
-        logger.error(f"Error checking table structure: {e}")
+        logger.error(f"Error checking location points: {e}")
         import traceback
         logger.error(traceback.format_exc())
         return False
 
 if __name__ == "__main__":
-    success = main()
+    success = check_location_points()
     print(f"Location point check {'succeeded' if success else 'failed'}") 
