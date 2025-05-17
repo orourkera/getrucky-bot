@@ -331,8 +331,8 @@ Elevation gain: {elevation}m"""
             if location_string_for_prompt == "an awesome spot":
                 example_location_display = "the great outdoors"
 
-            prompt = f"""You are a rucking enthusiast and coach. Write a short, engaging tweet (around 140-160 characters before stats are added) about the following ruck session.
-Your tweet should start by naturally mentioning the location: '{location_string_for_prompt}'.
+            prompt = f"""You are a rucking enthusiast and awkwared marketing intern. Write a short, engaging tweet (around 140-160 characters before stats are added) about the following ruck session.
+Your tweet should start by naturally mentioning the location calling out anything interesting about it: '{location_string_for_prompt}'.
 Then, make ONE keen, specific observation about this ruck.
 Session details:
 {session_details_for_prompt}
