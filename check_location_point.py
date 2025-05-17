@@ -52,7 +52,8 @@ def check_location_points(session_id=None):
         else:
             # Sample some sessions with location points
             logger.info("Listing sample sessions with location points...")
-            response = supabase_client.table('location_point').select('session_id').order('created_at', desc=True).limit(10).execute()
+            # Don't use created_at since it doesn't exist
+            response = supabase_client.table('location_point').select('session_id').limit(20).execute()
             
             if not response.data:
                 logger.warning("No location points found in the database")
@@ -61,8 +62,14 @@ def check_location_points(session_id=None):
             session_ids = list(set([point.get('session_id') for point in response.data if point.get('session_id')]))
             logger.info(f"Sessions with location points: {session_ids}")
             
+            # Check a few of these sessions
+            if session_ids:
+                for test_id in session_ids[:3]:  # Check first 3 sessions
+                    logger.info(f"\nTesting session ID: {test_id}")
+                    check_location_points(test_id)
+            
             # Get some sample coordinates for testing geocoding
-            logger.info("Testing geocoding with sample coordinates...")
+            logger.info("\nTesting geocoding with sample coordinates...")
             test_coordinates = [
                 (40.7128, -74.0060),  # New York
                 (51.5074, -0.1278),   # London
