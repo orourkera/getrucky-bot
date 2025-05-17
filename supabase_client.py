@@ -333,9 +333,57 @@ def generate_map_image(route_points: List[Tuple[float, float]], session_data: Di
         # Save the map as HTML
         m.save(html_file)
         
-        logger.info(f"Generated enhanced map HTML for {username}'s ruck session ({distance} miles): {html_file}")
-        return html_file
-        
+        # Convert HTML to PNG image using Selenium
+        try:
+            # Check if we're on Heroku (which has Chrome driver installed)
+            if 'DYNO' in os.environ:
+                import selenium
+                from selenium import webdriver
+                from selenium.webdriver.chrome.options import Options
+                import time
+                
+                logger.info("Using Chrome headless browser to convert HTML to PNG")
+                
+                # Set up headless Chrome browser options
+                chrome_options = Options()
+                chrome_options.add_argument("--headless")
+                chrome_options.add_argument("--disable-gpu")
+                chrome_options.add_argument("--no-sandbox")
+                chrome_options.add_argument("--disable-dev-shm-usage")
+                
+                # Set browser window size for the image
+                chrome_options.add_argument("--window-size=1200,800")
+                
+                # Create a Chrome WebDriver instance with these options
+                driver = webdriver.Chrome(options=chrome_options)
+                
+                # Open the HTML file
+                html_path = f"file://{html_file}"
+                logger.info(f"Opening HTML file: {html_path}")
+                driver.get(html_path)
+                
+                # Wait for map to fully load
+                time.sleep(2)
+                
+                # Create PNG file path
+                png_file = html_file.replace('.html', '.png')
+                
+                # Take a screenshot and save as PNG
+                driver.save_screenshot(png_file)
+                driver.quit()
+                
+                logger.info(f"Saved map as PNG: {png_file}")
+                return png_file
+            else:
+                # We're not on Heroku, just return the HTML
+                logger.info(f"Generated enhanced map HTML for {username}'s ruck session ({distance} miles): {html_file}")
+                return html_file
+        except Exception as screenshot_error:
+            # If screenshot fails, fall back to returning the HTML
+            logger.error(f"Error converting map to PNG: {screenshot_error}")
+            logger.info(f"Falling back to HTML map: {html_file}")
+            return html_file
+            
     except Exception as e:
         logger.error(f"Error generating map image: {e}")
         return None
