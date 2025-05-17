@@ -4,6 +4,8 @@
 import logging
 import sys
 import os
+import json
+import requests
 from supabase_client import initialize_supabase_client, get_location_from_session, geocode_coordinates
 
 # Configure logging
@@ -17,72 +19,91 @@ def check_location_points(session_id=None):
         logger.info("Initializing Supabase client...")
         supabase_client = initialize_supabase_client()
         
-        # Use provided session ID or list some samples
-        if not session_id and len(sys.argv) > 1:
-            session_id = sys.argv[1]
+        # Print Supabase URL for debugging
+        supabase_url = os.getenv('SUPABASE_URL', '')
+        logger.info(f"Using Supabase URL: {supabase_url}")
         
-        if session_id:
-            logger.info(f"Checking location points for session ID: {session_id}")
-            # Query the location_point table for this session
-            str_session_id = str(session_id)
-            response = supabase_client.table('location_point').select('*').eq('session_id', str_session_id).limit(5).execute()
+        # Test direct API access to diagnose permission issues
+        try:
+            from supabase import Client
             
-            if not response.data:
-                logger.warning(f"No location points found for session {session_id}")
-                return False
-                
-            logger.info(f"Found {len(response.data)} location points for session {session_id}")
-            for i, point in enumerate(response.data[:5]):
-                logger.info(f"Point {i+1}: lat={point.get('latitude')}, lon={point.get('longitude')}")
-                
-            # Try geocoding the first point
-            first_point = response.data[0]
-            latitude = first_point.get('latitude')
-            longitude = first_point.get('longitude')
+            api_key = os.getenv('SUPABASE_KEY', '')
+            # Only show first 8 characters for security
+            if api_key:
+                logger.info(f"API Key prefix: {api_key[:8]}...")
+            else:
+                logger.warning("No API key found in environment")
             
-            if latitude and longitude:
-                logger.info(f"Geocoding coordinates: {latitude}, {longitude}")
-                location = geocode_coordinates(latitude, longitude)
-                logger.info(f"Geocoded location: {location}")
+            # Make a direct request to the location_point table
+            direct_url = f"{supabase_url}/rest/v1/location_point?select=*&limit=1"
+            headers = {
+                "apikey": api_key,
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            }
             
-            # Use the get_location_from_session function
-            logger.info(f"Using get_location_from_session for session {session_id}...")
-            location = get_location_from_session(supabase_client, session_id)
-            logger.info(f"Result from get_location_from_session: {location}")
-        else:
-            # Sample some sessions with location points
-            logger.info("Listing sample sessions with location points...")
-            # Don't use created_at since it doesn't exist
-            response = supabase_client.table('location_point').select('session_id').limit(20).execute()
+            logger.info(f"Making direct request to: {direct_url}")
+            response = requests.get(direct_url, headers=headers)
             
-            if not response.data:
-                logger.warning("No location points found in the database")
-                return False
-                
-            session_ids = list(set([point.get('session_id') for point in response.data if point.get('session_id')]))
-            logger.info(f"Sessions with location points: {session_ids}")
-            
-            # Check a few of these sessions
-            if session_ids:
-                for test_id in session_ids[:3]:  # Check first 3 sessions
-                    logger.info(f"\nTesting session ID: {test_id}")
-                    check_location_points(test_id)
-            
-            # Get some sample coordinates for testing geocoding
-            logger.info("\nTesting geocoding with sample coordinates...")
-            test_coordinates = [
-                (40.7128, -74.0060),  # New York
-                (51.5074, -0.1278),   # London
-                (35.6762, 139.6503),  # Tokyo
-                (48.8566, 2.3522)     # Paris
-            ]
-            
-            for lat, lon in test_coordinates:
-                logger.info(f"Geocoding test coordinates: {lat}, {lon}")
-                location = geocode_coordinates(lat, lon)
-                logger.info(f"Geocoded location: {location}")
+            if response.status_code == 200:
+                logger.info(f"Direct request successful, got {len(response.json())} records")
+            else:
+                logger.error(f"Direct request failed: {response.status_code} - {response.text}")
+        except Exception as direct_error:
+            logger.error(f"Error making direct request: {direct_error}")
         
-        return True
+        # Explicitly check for session 643 which we know exists
+        session_id = '643'
+        logger.info(f"Checking location points for known session ID: {session_id}")
+        
+        # Try different format approaches for session_id
+        formats_to_try = [
+            session_id,               # String
+            int(session_id) if session_id.isdigit() else session_id,  # Integer
+            f"'{session_id}'",        # SQL string literal
+            f"\"{session_id}\"",      # Double quoted
+        ]
+        
+        success = False
+        for format_id in formats_to_try:
+            try:
+                logger.info(f"Trying session_id format: {format_id} (type: {type(format_id)})")
+                response = supabase_client.table('location_point').select('*').eq('session_id', format_id).limit(5).execute()
+                
+                if response.data:
+                    logger.info(f"Success with format {format_id}! Found {len(response.data)} location points")
+                    success = True
+                    break
+                else:
+                    logger.warning(f"No data found with format {format_id}")
+            except Exception as format_error:
+                logger.error(f"Error with format {format_id}: {format_error}")
+        
+        if not success:
+            # Test if the location_point table exists
+            try:
+                logger.info("Checking if location_point table exists...")
+                # List tables
+                # Note: We're using PostgreSQL's information_schema to list tables
+                tables_query = """
+                    SELECT table_name FROM information_schema.tables 
+                    WHERE table_schema = 'public'
+                """
+                tables_response = supabase_client.rpc('pg_exec', {'query': tables_query}).execute()
+                logger.info(f"Tables in database: {tables_response.data}")
+                
+                # Check RLS (Row Level Security) policies
+                rls_query = """
+                    SELECT tablename, policyname, permissive, roles, cmd, qual
+                    FROM pg_policies
+                    WHERE schemaname = 'public'
+                """
+                rls_response = supabase_client.rpc('pg_exec', {'query': rls_query}).execute()
+                logger.info(f"RLS policies: {rls_response.data}")
+            except Exception as schema_error:
+                logger.error(f"Error checking schema: {schema_error}")
+        
+        return success
     except Exception as e:
         logger.error(f"Error checking location points: {e}")
         import traceback
