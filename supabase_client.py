@@ -52,9 +52,16 @@ def get_recent_ruck_sessions(client: Client, limit: int = 5) -> List[Dict[Any, A
 def get_session_route_points(client: Client, session_id: str) -> List[Tuple[float, float]]:
     """Fetch route points for a specific ruck session or generate dummy points if none exist."""
     try:
-        # Query the location_point table, ensuring session_id is converted to string
+        # Query the location_point table, ensuring session_id is converted to integer
         logger.info(f"Fetching route points for session {session_id}")
-        response = client.table('location_point').select('*').eq('session_id', str(session_id)).execute()
+        # Convert session_id to integer for database query since it's an integer column
+        try:
+            int_session_id = int(session_id)
+        except (ValueError, TypeError):
+            logger.error(f"Failed to convert session_id '{session_id}' to integer")
+            return []
+            
+        response = client.table('location_point').select('*').eq('session_id', int_session_id).execute()
         
         logger.info(f"Query response data count: {len(response.data) if response.data else 0}")
         
@@ -156,9 +163,22 @@ def get_location_from_session(client: Client, session_id: str) -> Dict[str, str]
         A dictionary with keys 'city', 'state', and 'country'
     """
     try:
-        # Query the location_point table for this session, ensuring session_id is converted to string
+        # Query the location_point table for this session, converting session_id to integer
         logger.info(f"Querying location points for session {session_id}")
-        response = client.table('location_point').select('latitude,longitude').eq('session_id', str(session_id)).limit(1).execute()
+        
+        # Convert session_id to integer for database query since it's an integer column
+        try:
+            int_session_id = int(session_id)
+        except (ValueError, TypeError):
+            logger.error(f"Failed to convert session_id '{session_id}' to integer")
+            # Return default if conversion fails
+            return {
+                'city': "Austin",
+                'state': "TX",
+                'country': "USA"
+            }
+            
+        response = client.table('location_point').select('latitude,longitude').eq('session_id', int_session_id).limit(1).execute()
         
         if response.data and len(response.data) > 0:
             # Get the first point
@@ -206,14 +226,13 @@ def generate_map_image(route_points: List[Tuple[float, float]], session_data: Di
             tiles='CartoDB dark_matter'  # Use a dark theme for better visualization
         )
         
-        # Add custom route line with gradient color based on elevation or speed if available
-        # For now, use a bright blue line that's visible on dark background
+        # Add custom route line with a more visible style
         folium.PolyLine(
             route_points,
-            color='#00BFFF',  # Deep Sky Blue
-            weight=5,
-            opacity=0.8,
-            dash_array='5, 5'  # Creates a dashed line effect
+            color='#00FFFF',  # Cyan - highly visible on dark background
+            weight=6,          # Thicker line
+            opacity=0.9,
+            dash_array=None    # Solid line for better visibility
         ).add_to(m)
         
         # Add nicer start marker with custom icon and popup
@@ -226,7 +245,7 @@ def generate_map_image(route_points: List[Tuple[float, float]], session_data: Di
         
         folium.Marker(
             location=route_points[0],
-            icon=folium.Icon(color='green', icon='play'),
+            icon=folium.Icon(color='green', icon='play', prefix='fa'),
             popup=folium.Popup(start_html, max_width=300)
         ).add_to(m)
         
@@ -241,7 +260,7 @@ def generate_map_image(route_points: List[Tuple[float, float]], session_data: Di
         
         folium.Marker(
             location=route_points[-1],
-            icon=folium.Icon(color='red', icon='stop'),
+            icon=folium.Icon(color='red', icon='stop', prefix='fa'),
             popup=folium.Popup(end_html, max_width=300)
         ).add_to(m)
         
@@ -249,39 +268,65 @@ def generate_map_image(route_points: List[Tuple[float, float]], session_data: Di
         if len(route_points) > 10:
             HeatMap(route_points, radius=15, blur=10, max_zoom=13).add_to(m)
         
-        # Add a session stats info box
+        # Add a session stats info box with improved styling
         distance = session_data.get('distance', '0')
         duration = session_data.get('duration', '0h')
         pace = session_data.get('pace', 'N/A')
         ruck_weight = session_data.get('ruck_weight', '0')
+        elevation_gain = session_data.get('elevation_gain', '0')
         
         stats_html = f"""
         <div style="
             position: absolute; 
-            bottom: 10px; 
+            bottom: 30px; 
             left: 10px; 
             z-index: 1000;
-            background-color: rgba(0, 0, 0, 0.7);
+            background-color: rgba(0, 0, 0, 0.8);
             color: white;
-            padding: 10px;
-            border-radius: 5px;
+            padding: 15px;
+            border-radius: 8px;
             font-family: Arial;
             font-size: 14px;
-            width: 200px;
+            width: 220px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.5);
+            border-left: 4px solid #00FFFF;
         ">
-            <h4 style="margin: 0 0 5px 0;">Ruck Stats</h4>
-            <div>🏃‍♂️ {distance} miles</div>
-            <div>⏱️ {duration}</div>
-            <div>⚡ {pace} min/mile</div>
-            <div>🎒 {ruck_weight}kg</div>
+            <h4 style="margin: 0 0 10px 0; color: #00FFFF; font-size: 16px;">Ruck Stats</h4>
+            <div style="margin-bottom: 5px;">🏃‍♂️ <b>Distance:</b> {distance} miles</div>
+            <div style="margin-bottom: 5px;">⏱️ <b>Duration:</b> {duration}</div>
+            <div style="margin-bottom: 5px;">⚡ <b>Pace:</b> {pace}/mi</div>
+            <div style="margin-bottom: 5px;">🎒 <b>Weight:</b> {ruck_weight}kg</div>
+            {f'<div>⛰️ <b>Elevation:</b> {elevation_gain}m</div>' if float(elevation_gain) > 0 else ''}
         </div>
         """
         
         # Add the stats HTML as a custom div
         m.get_root().html.add_child(folium.Element(stats_html))
         
-        # Fit the map to the route bounds
-        m.fit_bounds(route_points)
+        # Add a title and branding to the map
+        title_html = f"""
+        <div style="
+            position: absolute; 
+            top: 10px; 
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-family: Arial;
+            font-size: 16px;
+            text-align: center;
+        ">
+            <b>@getrucky</b> | Ruck Session Map
+        </div>
+        """
+        
+        m.get_root().html.add_child(folium.Element(title_html))
+        
+        # Fit the map to the route bounds with some padding
+        m.fit_bounds(route_points, padding=(30, 30))
         
         # Create a unique filename with timestamp
         timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
@@ -294,7 +339,7 @@ def generate_map_image(route_points: List[Tuple[float, float]], session_data: Di
         # Save the map as HTML
         m.save(html_file)
         
-        logger.info(f"Generated map HTML for {username}'s ruck session ({distance} miles): {html_file}")
+        logger.info(f"Generated enhanced map HTML for {username}'s ruck session ({distance} miles): {html_file}")
         return html_file
         
     except Exception as e:
