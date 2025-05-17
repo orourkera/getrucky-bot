@@ -114,10 +114,6 @@ def main():
         # Generate post text
         post_text = content_generator.generate_map_post_text(formatted_data)
         
-        # Add uniqueness (timestamp)
-        current_time = datetime.utcnow().strftime('%H:%M')
-        post_text = f"{post_text} [{current_time}]"
-        
         # Ensure it's within character limit
         if len(post_text) > 280:
             post_text = post_text[:276] + " ..."

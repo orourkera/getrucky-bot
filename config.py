@@ -24,6 +24,11 @@ APP_API_TOKEN = os.getenv('APP_API_TOKEN', '')
 XAI_API_KEY = os.getenv('XAI_API_KEY', '')
 GROQ_API_KEY = os.getenv('GROQ_API_KEY', '')  # Added Groq API key as an alternative to xAI
 
+# Supabase and Stadia Maps credentials
+SUPABASE_URL = os.getenv('SUPABASE_URL', '')
+SUPABASE_KEY = os.getenv('SUPABASE_KEY', '')
+STADIA_API_KEY = os.getenv('STADIA_API_KEY', '')
+
 # Database Configuration
 DATABASE_URL = os.getenv('DATABASE_URL', '')
 SQLITE_DB_PATH = '/tmp'  # Heroku ephemeral filesystem
@@ -41,6 +46,10 @@ PAPERTRAIL_API_TOKEN = os.getenv('PAPERTRAIL_API_TOKEN', '')
 POST_FREQUENCY = range(5, 11)  # 5-10 posts per day
 SEARCH_TERMS = ["ruck", "rucking", "#rucking", "#rucklife"]
 MAX_REPLIES = 50  # Max replies per hour
+
+# Map Post Configuration
+MAP_POST_FREQUENCY = 2  # Number of map posts per week
+MAP_POST_DAYS = [1, 4]  # Days of the week for map posts (0 = Monday, 6 = Sunday)
 
 def get_post_times():
     """
@@ -85,7 +94,8 @@ WEEKLY_THEMES = {
     6: "Ruck Fun Sunday"
 }
 CONTENT_WEIGHTS = {
-    'health_benefits': 0.8,   # Benefits of rucking
+    'health_benefits': 0.75,  # Benefits of rucking
+    'map_post': 0.05,         # Map posts
     'poll': 0.1,
     'meme': 0.05,
     'pun': 0.05
@@ -129,11 +139,15 @@ def validate_config():
     # Either xAI or Groq API key must be available
     has_ai_key = bool(XAI_API_KEY or GROQ_API_KEY)
     
+    # Supabase and Stadia Maps keys are required for map functionality
+    has_map_keys = bool(SUPABASE_URL and SUPABASE_KEY and STADIA_API_KEY)
+    
     status = {}
     for key in required_keys:
         value = globals().get(key, '') or os.getenv(key, '')
         status[key] = bool(value)
     
     status['AI_API_KEY'] = has_ai_key  # Add check for either xAI or Groq key
+    status['MAP_KEYS'] = has_map_keys  # Add check for map functionality keys
     
     return status 

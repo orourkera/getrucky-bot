@@ -6,6 +6,7 @@ from datetime import datetime, time
 import content_generator
 import api_client
 from config import get_post_times, POST_FREQUENCY
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -68,27 +69,19 @@ def post_regular_content(x_client, xai_headers):
     try:
         content_type, theme = content_generator.select_content_type()
         try:
-            post_text = content_generator.generate_post(xai_headers, content_type, theme)
+            post_result = content_generator.generate_post(xai_headers, content_type, theme)
+            
+            # Check if this is a map post
+            if isinstance(post_result, dict) and post_result.get('is_map_post'):
+                return post_map_content(x_client, post_result['session_data'], post_result['map_path'])
+            else:
+                post_text = post_result
         except Exception as e:
             logger.error(f"Error during content generation: {e}")
             # If API fails, use template fallback
             post_text = content_generator.get_random_template('post', content_type)
             logger.warning(f"Using template fallback for {content_type} post due to xAI API error")
         
-        # First trim content to leave room for timestamp
-        # Maximum tweet length is 280 characters
-        # We need to reserve about 11 characters for " [HH:MM]" timestamp format
-        char_limit = 265  # 280 - 15 chars for timestamp and buffer
-        
-        if len(post_text) > char_limit:
-            post_text = post_text[:char_limit]
-        
-        # Create a unique timestamp (HH:MM format)
-        current_time = datetime.utcnow().strftime('%H:%M')
-        
-        # Add timestamp to the end of the tweet
-        post_text = f"{post_text} [{current_time}]"
-            
         # Final check to ensure it's under the limit
         if len(post_text) > 280:
             post_text = post_text[:276] + " ..."
@@ -100,13 +93,102 @@ def post_regular_content(x_client, xai_headers):
         logger.error(f"Error posting regular content: {e}")
         return None
 
+def post_map_content(x_client, session_data, map_path):
+    """Post a ruck session with the 'Ruck of the day' format."""
+    try:
+        # Generate text for the map post
+        post_text = content_generator.generate_map_post_text(session_data)
+        
+        # Final check to ensure it's under the limit
+        if len(post_text) > 280:
+            post_text = post_text[:276] + " ..."
+        
+        # Post the tweet (with media if available)
+        if map_path and os.path.exists(map_path):
+            tweet_id = api_client.post_tweet(x_client, post_text, media=map_path)
+        else:
+            tweet_id = api_client.post_tweet(x_client, post_text)
+        
+        # Log the post
+        distance = session_data.get('distance', '0')
+        logger.info(f"Posted 'Ruck of the day' for {distance} mile session: {post_text[:50]}...")
+        
+        return tweet_id
+    except Exception as e:
+        logger.error(f"Error posting map content: {e}")
+        return None
+
 def post_session_content(x_client, app_client, xai_headers):
     """Fetch ruck session data and post about it with enhanced achievement tracking."""
     try:
+        # Try to get a session from Supabase first (if integration is available)
+        try:
+            from supabase_client import initialize_supabase_client, format_session_data, get_session_route_points
+            
+            supabase_client = initialize_supabase_client()
+            
+            # Get most recent session that's longer than 5 minutes (300 seconds)
+            logger.info("Looking for rucks longer than 5 minutes in Supabase...")
+            response = supabase_client.table('ruck_session')\
+                       .select('*')\
+                       .gt('duration_seconds', 300)\
+                       .order('started_at', desc=True)\
+                       .limit(1)\
+                       .execute()
+            
+            if response.data:
+                session_data = response.data[0]
+                session_id = session_data['id']
+                logger.info(f"Found Supabase session ID: {session_id} with duration {session_data.get('duration_seconds')} seconds")
+                
+                # Format the session data
+                formatted_data = format_session_data(session_data)
+                
+                # Generate post text using the map post format
+                post_text = content_generator.generate_map_post_text(formatted_data)
+                
+                # Add timestamp and format for posting
+                return post_map_content(x_client, formatted_data, None)
+            else:
+                logger.info("No suitable Supabase sessions found, trying app API...")
+        except Exception as e:
+            logger.warning(f"Error using Supabase for sessions, falling back to app API: {e}")
+        
+        # Fall back to the legacy app API
         sessions = api_client.get_ruck_sessions(app_client)
         if sessions:
+            # Filter for sessions that are at least 5 minutes (300 seconds)
+            long_enough_sessions = []
+            for session in sessions:
+                # Convert duration to seconds if possible
+                duration_str = session.get('duration', '0')
+                seconds = 0
+                
+                try:
+                    if 'h' in duration_str and 'm' in duration_str:
+                        hours, mins = duration_str.split('h')
+                        seconds = int(hours.strip()) * 3600 + int(mins.replace('m', '').strip()) * 60
+                    elif 'h' in duration_str:
+                        hours = duration_str.replace('h', '')
+                        seconds = int(hours.strip()) * 3600
+                    elif 'm' in duration_str:
+                        mins = duration_str.replace('m', '')
+                        seconds = int(mins.strip()) * 60
+                except:
+                    # If parsing fails, assume it's not long enough
+                    seconds = 0
+                
+                if seconds >= 300:
+                    session['duration_seconds'] = seconds
+                    long_enough_sessions.append(session)
+            
+            if not long_enough_sessions:
+                logger.warning("No sessions found that are longer than 5 minutes")
+                # Fallback to regular content with seasonal theme
+                return post_regular_content(x_client, xai_headers)
+            
             # Sort sessions by achievements to prioritize more significant ones
-            sessions.sort(key=lambda s: (
+            long_enough_sessions.sort(key=lambda s: (
                 float(s.get('distance', 0)) >= 10,  # Double-digit distance
                 float(s.get('total_distance', 0)) >= 100,  # 100-mile milestone
                 int(s.get('streak', 0)) >= 7,  # 7-day streak
@@ -114,34 +196,20 @@ def post_session_content(x_client, app_client, xai_headers):
             ), reverse=True)
             
             # Try to find a session with achievements first
-            session = next((s for s in sessions if any([
+            session = next((s for s in long_enough_sessions if any([
                 float(s.get('distance', 0)) >= 10,
                 float(s.get('total_distance', 0)) >= 100,
                 int(s.get('streak', 0)) >= 7
-            ])), sessions[0])  # Fallback to first session if none have achievements
+            ])), long_enough_sessions[0])  # Fallback to first session if none have achievements
             
             # Add total distance and streak if not present
             if 'total_distance' not in session:
-                session['total_distance'] = str(float(session.get('distance', 0)))
+                session['total_distance'] = str(float(session.get('distance', '0')))
             if 'streak' not in session:
                 session['streak'] = '0'
             
             post_text = content_generator.generate_session_post(xai_headers, session)
             
-            # First trim content to leave room for timestamp
-            # Maximum tweet length is 280 characters
-            # We need to reserve about 11 characters for " [HH:MM]" timestamp format
-            char_limit = 265  # 280 - 15 chars for timestamp and buffer
-            
-            if len(post_text) > char_limit:
-                post_text = post_text[:char_limit]
-            
-            # Create a unique timestamp (HH:MM format)
-            current_time = datetime.utcnow().strftime('%H:%M')
-            
-            # Add timestamp to the end of the tweet
-            post_text = f"{post_text} [{current_time}]"
-                
             # Final check to ensure it's under the limit
             if len(post_text) > 280:
                 post_text = post_text[:276] + " ..."
@@ -199,22 +267,11 @@ def engage_with_posts(x_client, xai_headers):
                     comment_text = api_client.generate_text(xai_headers, prompt)
                     content_generator.cache_response(prompt, comment_text)
                 
-                # Create a unique timestamp (HH:MM format)
-                current_time = datetime.utcnow().strftime('%H:%M')
+                # Final check
+                if comment_text and len(comment_text) > 280:
+                    comment_text = comment_text[:276] + " ..."
                 
-                # First trim content to leave room for timestamp
-                char_limit = 265  # 280 - 15 chars for timestamp and buffer
-                if comment_text and len(comment_text) > char_limit:
-                    comment_text = comment_text[:char_limit]
-                
-                # Add timestamp for uniqueness
                 if comment_text:
-                    comment_text = f"{comment_text} [{current_time}]"
-                    
-                    # Final check
-                    if len(comment_text) > 280:
-                        comment_text = comment_text[:276] + " ..."
-                    
                     if api_client.reply_to_tweet(x_client, tweet_id, comment_text):
                         engagement_count['commented'] += 1
                         store_engagement_action(tweet_id, 'comment')

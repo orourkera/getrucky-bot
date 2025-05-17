@@ -342,10 +342,6 @@ def generate_map_post_text(session_data):
             
             # Generate the observation
             observation = api_client.generate_text(xai_headers, prompt)
-            
-            # Limit the length just to be safe
-            if observation and len(observation) > 100:
-                observation = observation[:97] + "..."
                 
             logger.info(f"Generated XAI observation: {observation}")
             
@@ -395,16 +391,63 @@ def generate_map_post_text(session_data):
     combined_text = f"{post_text} {stats}"
     
     # Make sure it's under the character limit
-    max_length = 200  # Leave room for timestamps and any additional text
+    max_length = 260  # Increased from 200 to allow more content
     if len(combined_text) > max_length:
-        # If we need to truncate, keep the required format intact
-        # and truncate the stats portion
-        extra_chars = len(combined_text) - max_length
-        if len(stats) > extra_chars + 3:  # +3 for ellipsis
-            shortened_stats = stats[:-extra_chars-3] + "..."
-            combined_text = f"{post_text} {shortened_stats}"
+        # Calculate how much space is needed for essential information
+        essential_length = len(post_text) + 20  # Allow some minimal space for most important stats
+        
+        # If essential content alone is too long, trim the post_text while preserving XAI observation
+        if essential_length > max_length:
+            # Preserve as much of the observation as possible
+            available_space = max_length - len(location_text) - 10  # Reserve some space for stats
+            if available_space > 30:  # Ensure we have reasonable space for an observation
+                post_text = location_text + post_text[len(location_text):len(location_text)+available_space-3] + "..."
+            else:
+                # If space is too tight, just use location with minimal text
+                post_text = location_text.strip() + " Great job!"
+            
+            # Add most critical stats only (distance)
+            if distance and float(distance) > 0:
+                combined_text = f"{post_text} 🏃‍♂️ {distance}mi"
+            else:
+                combined_text = post_text
         else:
-            # If stats are too short to meaningfully truncate, just use the main format
-            combined_text = post_text
+            # We can keep the full post_text but need to trim stats
+            # Sort stats by importance: distance, duration, weight, pace, elevation
+            priority_stats = []
+            remaining_space = max_length - len(post_text) - 1  # -1 for the space
+            
+            if distance and float(distance) > 0:
+                stat = f"🏃‍♂️ {distance} miles"
+                if len(stat) <= remaining_space:
+                    priority_stats.append(stat)
+                    remaining_space -= len(stat) + 2  # +2 for ", "
+            
+            if remaining_space > 15 and duration and duration != "0h" and duration != "N/A":
+                stat = f"⏱️ {duration}"
+                if len(stat) <= remaining_space:
+                    priority_stats.append(stat)
+                    remaining_space -= len(stat) + 2
+            
+            if remaining_space > 10 and weight and float(weight) > 0:
+                stat = f"🎒 {weight}kg"
+                if len(stat) <= remaining_space:
+                    priority_stats.append(stat)
+                    remaining_space -= len(stat) + 2
+            
+            if remaining_space > 10 and pace and pace != "N/A":
+                stat = f"⚡ {pace}/mi"
+                if len(stat) <= remaining_space:
+                    priority_stats.append(stat)
+                    remaining_space -= len(stat) + 2
+            
+            if remaining_space > 15 and elevation and float(elevation) > 10:
+                stat = f"⛰️ {elevation}m gain"
+                if len(stat) <= remaining_space:
+                    priority_stats.append(stat)
+            
+            # Join prioritized stats
+            priority_stats_text = ", ".join(priority_stats)
+            combined_text = f"{post_text} {priority_stats_text}"
     
     return combined_text 

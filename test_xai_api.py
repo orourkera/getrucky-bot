@@ -1,72 +1,68 @@
 #!/usr/bin/env python
-# test_xai_api.py
+# test_xai_api.py - Production test for XAI API on Heroku
 
-import logging
 import os
-import requests
-import json
+import logging
+import traceback
+import random
+import api_client
+import content_generator
+from config import CONTENT_WEIGHTS
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def test_xai_api():
-    """Test the xAI API connection directly."""
-    logger.info("Testing xAI API connection directly")
-    
-    # Get the API key
-    api_key = os.getenv('XAI_API_KEY')
-    if not api_key:
-        logger.error("XAI_API_KEY environment variable not set")
-        return False
-    
-    logger.info(f"Using API key starting with: {api_key[:5]}...")
-    
-    # Set up headers
-    headers = {
-        'Authorization': f'Bearer {api_key}',
-        'Content-Type': 'application/json'
-    }
-    
-    # Test prompt
-    prompt = "Generate a short message about the benefits of rucking, <50 characters"
-    
-    # API payload
-    payload = {
-        "model": "grok-2",
-        "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 150,
-        "temperature": 0.9
-    }
-    
+def main():
+    """Run a full production test with XAI API on Heroku."""
     try:
-        logger.info("Making direct call to xAI API...")
-        response = requests.post(
-            "https://api.x.ai/v1/chat/completions",
-            json=payload,
-            headers=headers,
-            timeout=15
-        )
+        # Initialize API clients
+        logger.info("Initializing X client...")
+        x_client = api_client.initialize_x_client(max_retries=3, retry_delay=5, verify=False)
+        logger.info("Initializing XAI client...")
+        xai_headers = api_client.initialize_xai_client()
         
-        # Check the response status
-        if response.status_code == 200:
-            logger.info(f"API call succeeded with status {response.status_code}")
-            response_json = response.json()
-            if 'choices' in response_json and len(response_json['choices']) > 0:
-                content = response_json['choices'][0]['message']['content']
-                logger.info(f"Generated text: {content}")
-                return True
-            else:
-                logger.error(f"Unexpected API response: {response_json}")
-                return False
+        # Randomly select a content type based on distribution weights
+        rand = random.random()
+        cumulative_weight = 0
+        selected_content_type = None
+        
+        for content_type, weight in CONTENT_WEIGHTS.items():
+            cumulative_weight += weight
+            if rand <= cumulative_weight:
+                selected_content_type = content_type
+                break
+        
+        if not selected_content_type:
+            selected_content_type = 'health_benefits'
+        
+        logger.info(f"Selected content type: {selected_content_type}")
+        
+        # Generate content using XAI
+        logger.info(f"Generating content with type: {selected_content_type}")
+        post_text = content_generator.generate_post(xai_headers, selected_content_type)
+        
+        # Ensure it's within character limit
+        if len(post_text) > 280:
+            post_text = post_text[:276] + " ..."
+        
+        # Post tweet
+        logger.info(f"Posting tweet: {post_text}")
+        logger.info(f"Tweet length: {len(post_text)} characters")
+        tweet_id = api_client.post_tweet(x_client, post_text)
+        
+        if tweet_id:
+            logger.info(f"Successfully posted tweet with ID: {tweet_id}")
+            return True
         else:
-            logger.error(f"API call failed with status {response.status_code}")
-            logger.error(f"Error response: {response.text}")
+            logger.error("Failed to get tweet ID - posting likely failed")
             return False
+            
     except Exception as e:
-        logger.error(f"Error calling xAI API: {e}", exc_info=True)
+        logger.error(f"Error during XAI API test: {e}")
+        logger.error(traceback.format_exc())
         return False
 
 if __name__ == "__main__":
-    success = test_xai_api()
-    logger.info(f"xAI API test {'succeeded' if success else 'failed'}") 
+    success = main()
+    logger.info(f"XAI API test {'succeeded' if success else 'failed'}") 

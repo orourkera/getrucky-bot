@@ -163,4 +163,71 @@ Configure Papertrail alerts for:
 5. Create a Pull Request
 
 ## License
-MIT License - see LICENSE file for details 
+MIT License - see LICENSE file for details
+
+## Map Post Feature
+
+### Setup
+
+The bot can now generate and post map visualizations of ruck sessions stored in a Supabase database. To enable this feature, you need to:
+
+1. **Set up Supabase**:
+   - Create a Supabase account and project at [https://supabase.com](https://supabase.com)
+   - Set up two tables:
+     - `ruck_sessions` table with fields for user info, distance, duration, etc.
+     - `route_points` table with fields for latitude, longitude, and session_id
+
+2. **Sign up for Stadia Maps**:
+   - Get an API key from [https://stadiamaps.com](https://stadiamaps.com)
+
+3. **Add environment variables to Heroku**:
+   ```bash
+   heroku config:set SUPABASE_URL=your_supabase_url
+   heroku config:set SUPABASE_KEY=your_supabase_key
+   heroku config:set STADIA_API_KEY=your_stadia_maps_key
+   ```
+
+4. **Deploy the changes**:
+   ```bash
+   git add .
+   git commit -m "Add map visualization feature"
+   git push heroku main
+   ```
+
+5. **Test the functionality**:
+   ```bash
+   # Run the test script locally
+   python test_map_post.py
+   ```
+
+### Database Structure
+
+For this feature to work properly, your Supabase database should have:
+
+1. **ruck_sessions table**:
+   ```sql
+   CREATE TABLE ruck_sessions (
+       id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+       user_name TEXT NOT NULL,
+       distance NUMERIC NOT NULL,
+       duration TEXT NOT NULL,
+       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+       total_distance NUMERIC,
+       streak INTEGER,
+       pace TEXT
+   );
+   ```
+
+2. **route_points table**:
+   ```sql
+   CREATE TABLE route_points (
+       id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+       session_id UUID REFERENCES ruck_sessions(id),
+       latitude NUMERIC NOT NULL,
+       longitude NUMERIC NOT NULL,
+       point_order INTEGER NOT NULL,
+       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+   );
+   ```
+
+Make sure your Supabase permissions are set up to allow reading from these tables. 

@@ -355,38 +355,53 @@ def initialize_xai_client():
         logger.error(f"Failed to initialize xAI API client: {e}")
         raise
 
-def generate_text(headers, prompt):
-    """Generate text using xAI API with the provided prompt."""
+def generate_text(xai_headers, prompt):
+    """Generate text using the xAI API."""
     try:
+        url = "https://api.x.ai/v1/chat/completions"
+        
+        # Create the payload for the request
         payload = {
             "model": "grok-3-beta",
             "messages": [
-                {"role": "system", "content": "You are a helpful assistant. Keep all responses very concise and brief, under 200 characters when possible."},
+                {"role": "system", "content": "You are an expert marketing writer creating short engaging tweets for a rucking (weighted hiking) fitness brand."},
                 {"role": "user", "content": prompt}
             ],
-            "max_tokens": 200,
-            "temperature": 0.9
+            "temperature": 0.7,
+            "max_tokens": 250,  # Increased from lower value to allow full responses
+            "top_p": 1
         }
         
-        response = requests.post(
-            "https://api.x.ai/v1/chat/completions",
-            json=payload,
-            headers=headers,
-            timeout=15
-        )
+        # Send the request
+        response = requests.post(url, headers=xai_headers, json=payload, timeout=30)
         
-        response.raise_for_status()
-        generated_text = response.json()['choices'][0]['message']['content'].strip()
-        
-        # Enforce character limit here as well
-        if len(generated_text) > 200:
-            generated_text = generated_text[:200]
-        
-        logger.info(f"Successfully generated text with xAI API: {prompt[:30]}...")
-        return generated_text
+        # Check for a successful response
+        if response.status_code == 200:
+            response_json = response.json()
+            
+            # The response should contain 'choices' with the model's text
+            if 'choices' in response_json and len(response_json['choices']) > 0:
+                model_response = response_json['choices'][0]['message']['content'].strip()
+                logger.info(f"Successfully generated text ({len(model_response)} chars)")
+                return model_response
+            else:
+                logger.error(f"Unexpected xAI API response format: {response_json}")
+                return None
+        else:
+            error_msg = f"xAI API request failed: {response.status_code} - {response.text}"
+            logger.error(error_msg)
+            # Try to use Groq API as a fallback if configured
+            if 'GROQ_API_KEY' in os.environ:
+                logger.info("Attempting to use Groq API as fallback...")
+                return generate_text_with_groq(prompt)
+            return None
     except Exception as e:
         logger.error(f"Error generating text with xAI API: {e}")
-        raise Exception(f"xAI API error: {str(e)}")
+        # Try to use Groq API as a fallback if configured
+        if 'GROQ_API_KEY' in os.environ:
+            logger.info("Attempting to use Groq API as fallback...")
+            return generate_text_with_groq(prompt)
+        return None
 
 def check_rate_limit_status():
     """Check and log the current Twitter/X API rate limit status for the authenticated user."""
