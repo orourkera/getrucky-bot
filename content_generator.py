@@ -3,9 +3,11 @@
 import random
 import logging
 import sqlite3
+import os
 from datetime import datetime
 import api_client
-from config import CONTENT_WEIGHTS, WEEKLY_THEMES, POST_FREQUENCY
+from config import CONTENT_WEIGHTS, WEEKLY_THEMES, POST_FREQUENCY, MAP_POST_DAYS
+import config
 
 logger = logging.getLogger(__name__)
 
