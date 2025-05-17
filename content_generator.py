@@ -5,9 +5,7 @@ import logging
 import sqlite3
 from datetime import datetime
 import api_client
-from config import CONTENT_WEIGHTS, WEEKLY_THEMES, POST_FREQUENCY, MAP_POST_DAYS
-import config
-import os
+from config import CONTENT_WEIGHTS, WEEKLY_THEMES, POST_FREQUENCY
 
 logger = logging.getLogger(__name__)
 
@@ -193,21 +191,21 @@ def get_prompt_for_content_type(content_type, theme=None):
     season = get_season(current_month)
 
     base_prompts = {
-        'pun': "You are a world class comedian. Create a witty rucking pun that would make fellow ruckers smile, playing on things that rhyme with ruck and rucking, including profane ones like 'go ruck yourself'. IMPORTANT: Keep response UNDER 200 characters total.",
+        'pun': "You are a world class comedian, and goofy, slightly awkward marketing intern. Create a witty rucking pun that would make fellow ruckers smile, playing on things that rhyme with ruck and rucking, including profane ones like 'go ruck yourself'. IMPORTANT: Keep response UNDER 200 characters total.",
         
         'challenge': f"Generate a {season}-themed rucking challenge that encourages community participation with specific goals and measurable targets. IMPORTANT: Keep response UNDER 200 characters total.",
         
-        'health_benefits': f"You are an avid outdoorsman, health scientist and researcher. You like data points and facts. Generate a {theme} post about the health and fitness benefits of rucking. Include ONE specific fact or statistic. IMPORTANT: Keep response UNDER 200 characters total.",
+        'health_benefits': f"You are a goofy slightly awkward marketing intern and an avid outdoorsman, health scientist and researcher. You like data points and facts. Generate a {theme} post about the health and fitness benefits of rucking. Include ONE specific fact or statistic. IMPORTANT: Keep response UNDER 200 characters total.",
         
-        'poll': "Create an engaging poll about rucking preferences with specific options related to gear, training methods, or favorite locations. IMPORTANT: Keep response UNDER 200 characters total.",
+        'poll': "You are a goofy slightly awkward marketing intern and an avid outdoorsman. Create an engaging poll about rucking preferences with specific options related to gear, training methods, or favorite locations. IMPORTANT: Keep response UNDER 200 characters total.",
         
-        'meme': "Create a relatable rucking meme about training struggles or gear preparations with a specific humorous scenario. IMPORTANT: Keep response UNDER 200 characters total.",
+        'meme': "You are a goofy slightly awkward marketing intern and an avid outdoorsman. Create a relatable rucking meme about training struggles or gear preparations with a specific humorous scenario. IMPORTANT: Keep response UNDER 200 characters total.",
         
-        'shoutout': "Generate a motivational shout-out for a rucking achievement with specific details about the accomplishment and encouraging words. IMPORTANT: Keep response UNDER 200 characters total.",
+        'shoutout': "You are a goofy slightly awkward marketing intern and an avid outdoorsmanGenerate a motivational shout-out for a rucking achievement with specific details about the accomplishment and encouraging words. IMPORTANT: Keep response UNDER 200 characters total.",
         
-        'ugc': "Create a supportive comment for a user's rucking post with specific feedback about their achievement or effort. IMPORTANT: Keep response UNDER 200 characters total.",
+        'ugc': "You are a goofy slightly inept awkward intern and an avid outdoorsman. Create a supportive comment for a user's rucking post with specific feedback about their achievement or effort. IMPORTANT: Keep response UNDER 200 characters total.",
         
-        'map_post': "Generate a brief caption for a mapped ruck session, highlighting distance, pace, and achievement. IMPORTANT: Keep response UNDER 200 characters total."
+        'map_post': "You are a goofy slightly awkward marketing intern and an avid outdoorsman. Generate a brief caption for a mapped ruck session, highlighting distance, pace, and achievement. IMPORTANT: Keep response UNDER 200 characters total."
     }
 
     # Handle the renamed theme category
