@@ -208,6 +208,11 @@ def generate_map_image(route_points: List[Tuple[float, float]], session_data: Di
         logger.warning("Not enough route points to generate a map")
         return None
     
+    # Define these variables from session_data at the beginning for use in filename and potentially other logic
+    distance = session_data.get('distance', '0') 
+    username = session_data.get('user', 'user')
+    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+
     try:
         # Calculate center point for the map
         center_lat = sum(point[0] for point in route_points) / len(route_points)
@@ -286,8 +291,8 @@ def generate_map_image(route_points: List[Tuple[float, float]], session_data: Di
         m.fit_bounds(route_points, padding=(30, 30))
         
         # Create a unique filename with timestamp
-        timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-        username = session_data.get('user', 'user')
+        # timestamp = datetime.now().strftime('%Y%m%d%H%M%S') # Already defined above
+        # username = session_data.get('user', 'user') # Already defined above
         
         # Save map to a temp file
         temp_dir = tempfile.mkdtemp()
