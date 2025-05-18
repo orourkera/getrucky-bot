@@ -137,22 +137,78 @@ def get_config(key: str) -> Any:
     return value
 
 def validate_config():
+    logger.info("Starting configuration validation...")
     required_keys = [
         'X_API_KEY', 'X_API_SECRET', 'X_ACCESS_TOKEN', 'X_ACCESS_TOKEN_SECRET'
     ]
     
-    # Either xAI or Groq API key must be available
-    has_ai_key = bool(XAI_API_KEY or GROQ_API_KEY)
-    
-    # Supabase and Stadia Maps keys are required for map functionality
-    has_map_keys = bool(SUPABASE_URL and SUPABASE_KEY and STADIA_API_KEY)
-    
     status = {}
+    all_present = True
+
+    logger.info("Checking core X API keys...")
     for key in required_keys:
-        value = globals().get(key, '') or os.getenv(key, '')
-        status[key] = bool(value)
+        value = os.getenv(key)
+        if not value:
+            logger.error(f"Missing critical environment variable: {key}")
+            status[key] = False
+            all_present = False
+        else:
+            # Log partial value for verification, e.g., first 4 and last 4 chars
+            logger.info(f"Found {key}: {value[:4]}...{value[-4:]}") 
+            status[key] = True
     
-    status['AI_API_KEY'] = has_ai_key  # Add check for either xAI or Groq key
-    status['MAP_KEYS'] = has_map_keys  # Add check for map functionality keys
+    logger.info("Checking AI API key (XAI_API_KEY or GROQ_API_KEY)...")
+    xai_key_val = os.getenv('XAI_API_KEY')
+    groq_key_val = os.getenv('GROQ_API_KEY')
+    has_ai_key = bool(xai_key_val or groq_key_val)
+    if not has_ai_key:
+        logger.error("Missing AI API Key: Neither XAI_API_KEY nor GROQ_API_KEY is set.")
+        all_present = False
+    else:
+        if xai_key_val:
+            logger.info(f"Found XAI_API_KEY: {xai_key_val[:4]}...{xai_key_val[-4:]}")
+        if groq_key_val:
+            logger.info(f"Found GROQ_API_KEY: {groq_key_val[:4]}...{groq_key_val[-4:]}")
+    status['AI_API_KEY'] = has_ai_key
+    
+    logger.info("Checking Map functionality keys (SUPABASE_URL, SUPABASE_KEY, STADIA_API_KEY)...")
+    supabase_url_val = os.getenv('SUPABASE_URL')
+    supabase_key_val = os.getenv('SUPABASE_KEY') 
+    stadia_key_val = os.getenv('STADIA_API_KEY')
+    
+    has_map_keys = bool(supabase_url_val and supabase_key_val and stadia_key_val)
+    if not supabase_url_val:
+        logger.error("Missing Map Key: SUPABASE_URL is not set.")
+        all_present = False # Not strictly required for bot to run, but map posts will fail
+    else:
+        logger.info(f"Found SUPABASE_URL: {supabase_url_val[:20]}...")
+    if not supabase_key_val:
+        logger.error("Missing Map Key: SUPABASE_KEY is not set.")
+        all_present = False
+    else:
+        logger.info(f"Found SUPABASE_KEY: {supabase_key_val[:4]}...{supabase_key_val[-4:]}")
+    if not stadia_key_val:
+        logger.error("Missing Map Key: STADIA_API_KEY is not set.")
+        all_present = False
+    else:
+        logger.info(f"Found STADIA_API_KEY: {stadia_key_val[:4]}...{stadia_key_val[-4:]}")
+    status['MAP_KEYS'] = has_map_keys
+    
+    if not all_present:
+        logger.error("One or more required environment variables are missing. Full status: %s", status)
+    else:
+        logger.info("All checked environment variables appear to be present. Full status: %s", status)
+        
+    # The function in main.py checks `if not all(config_status.values())`
+    # So, this return needs to align with that. Let's ensure all *critical* ones are part of this `all_present` check for sys.exit.
+    # For now, critical means X keys and at least one AI key.
+    # Map keys are important for map posts but bot might do other things.
+    is_critical_config_missing = not (status.get('X_API_KEY') and \
+                                    status.get('X_API_SECRET') and \
+                                    status.get('X_ACCESS_TOKEN') and \
+                                    status.get('X_ACCESS_TOKEN_SECRET') and \
+                                    status.get('AI_API_KEY'))
+    if is_critical_config_missing:
+         logger.error("CRITICAL CONFIGURATION MISSING - Worker will likely exit.")
     
     return status 
