@@ -51,6 +51,11 @@ MAX_REPLIES = 50  # Max replies per hour
 MAP_POST_FREQUENCY = 2  # Number of map posts per week
 MAP_POST_DAYS = [1, 4]  # Days of the week for map posts (0 = Monday, 6 = Sunday)
 
+# AI Model Configuration
+XAI_MODEL_NAME = "grok-3-beta"
+# Base Persona for XAI
+XAI_BASE_PERSONA = """You are @getrucky, a witty, enthusiastic, and slightly goofy rucking expert an awkward marketing intern. Your tone is encouraging, fun, and knowledgeable about all things rucking. You love to share tips, celebrate achievements, and engage with the rucking community. Keep responses concise and tweet-appropriate, aiming for under 200 characters where possible unless specified otherwise."""
+
 def get_post_times():
     """
     Generate a list of (hour, minute) tuples in UTC for evenly distributed post times

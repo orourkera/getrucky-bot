@@ -263,15 +263,19 @@ def engage_with_posts(x_client, xai_headers):
             
             # Cross-posting comment (limit to 10 per week using database counter)
             if not comment_limit_reached:
-                prompt = "Generate a brief comment for a rucking post, promoting @getrucky. IMPORTANT: Keep response UNDER 200 characters total."
-                comment_text = content_generator.get_cached_response(prompt)
-                if not comment_text:
-                    comment_text = api_client.generate_text(xai_headers, prompt)
-                    content_generator.cache_response(prompt, comment_text)
+                # This is now just the task-specific part of the prompt
+                user_prompt_for_comment = "User's rucking-related post detected. Generate a brief, supportive comment promoting @getrucky. Keep it under 150 characters. Include a relevant emoji if appropriate." 
                 
-                # Final check
-                if comment_text and len(comment_text) > 280:
-                    comment_text = comment_text[:276] + " ..."
+                # Check cache with the user_prompt_for_comment
+                comment_text = content_generator.get_cached_response(user_prompt_for_comment)
+                if not comment_text:
+                    # api_client.generate_text will add the base persona
+                    comment_text = api_client.generate_text(xai_headers, user_prompt_for_comment) 
+                    content_generator.cache_response(user_prompt_for_comment, comment_text)
+                
+                # Final check for length before posting
+                if comment_text and len(comment_text) > 280: # Twitter's hard limit for replies
+                    comment_text = comment_text[:277] + "..."
                 
                 if comment_text:
                     if api_client.reply_to_tweet(x_client, tweet_id, comment_text):

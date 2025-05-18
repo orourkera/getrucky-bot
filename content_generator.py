@@ -95,12 +95,14 @@ def generate_session_post(xai_headers, session_data):
     
     achievement_text = " and achieved " + ", ".join(achievements) if achievements else ""
     
-    prompt = f"""Create a brief shout-out post for a ruck session:
-    User: {user}
-    Distance: {distance} miles
-    Duration: {time}
-    Achievements: {achievement_text if achievement_text else 'None'}
-    Include 1-2 relevant emojis and ONE hashtag maximum. IMPORTANT: Keep response UNDER 200 characters total."""
+    prompt = f"""Create a brief, enthusiastic shout-out post for this ruck session:
+User: {user}
+Distance: {distance} miles
+Duration: {time}
+Achievements: {achievement_text if achievement_text else 'None'}
+
+Keep the tone celebratory. Include 1-2 relevant emojis. Use a strong call to action or an inspiring message. 
+End with ONE hashtag. IMPORTANT: Response strictly under 180 characters."""
     
     cached_response = get_cached_response(prompt)
     if cached_response:
@@ -160,18 +162,18 @@ def generate_reply(xai_headers, tweet_text, sentiment, content_type=None, sentim
         if sentiment_context.get('contains_emojis'):
             prompt_parts.append("matching their tone")
     
-    # Construct final prompt
-    prompt = f"Generate a {' '.join(prompt_parts)} reply, <280 characters."
+    # Construct final user prompt for the reply generation task
+    user_prompt = f"The user tweeted: '{tweet_text}'. My sentiment analysis is: '{sentiment}' with context: {sentiment_context}. Generate a reply that is {' '.join(prompt_parts)}. IMPORTANT: Response strictly under 260 characters."
     
-    cached_response = get_cached_response(prompt)
+    cached_response = get_cached_response(user_prompt)
     if cached_response:
         logger.info(f"Using cached response for {sentiment} reply")
         return cached_response
     
     try:
-        text = api_client.generate_text(xai_headers, prompt)
+        text = api_client.generate_text(xai_headers, user_prompt)
         if text:
-            cache_response(prompt, text)
+            cache_response(user_prompt, text)
             logger.info(f"Generated {sentiment} reply with xAI API")
             return text
     except Exception as e:
@@ -188,34 +190,37 @@ def generate_reply(xai_headers, tweet_text, sentiment, content_type=None, sentim
     return template
 
 def get_prompt_for_content_type(content_type, theme=None):
-    """Return the appropriate prompt for the content type with clear focus on specific topics."""
+    """Return the task-specific user prompt for the content type."""
     current_month = datetime.utcnow().month
     season = get_season(current_month)
 
-    base_prompts = {
-        'pun': "You are a world class comedian, and goofy, slightly awkward marketing intern. Create a witty rucking pun that would make fellow ruckers smile, playing on things that rhyme with ruck and rucking, including profane ones like 'go ruck yourself'. IMPORTANT: Keep response UNDER 200 characters total.",
+    # These prompts are now just the *user* part of the request
+    # The base persona is handled by api_client.generate_text
+    base_user_prompts = {
+        'pun': "Create a witty rucking pun. Focus on rhymes with ruck/rucking or rucking concepts. Make it smile-worthy for fellow ruckers. IMPORTANT: Response strictly under 160 characters.",
         
-        'challenge': f"Generate a {season}-themed rucking challenge that encourages community participation with specific goals and measurable targets. IMPORTANT: Keep response UNDER 200 characters total.",
+        'challenge': f"Generate a {season}-themed rucking challenge. It should encourage community participation with specific, measurable goals. IMPORTANT: Response strictly under 180 characters.",
         
-        'health_benefits': f"You are a goofy slightly awkward marketing intern and an avid outdoorsman, health scientist and researcher. You like data points and facts. Generate a {theme} post about the health and fitness benefits of rucking. Include ONE specific fact or statistic. IMPORTANT: Keep response UNDER 200 characters total.",
+        'health_benefits': f"Write a post about the {theme if theme else 'general'} health and fitness benefits of rucking. Include ONE specific fact or statistic. IMPORTANT: Response strictly under 180 characters.",
         
-        'poll': "You are a goofy slightly awkward marketing intern and an avid outdoorsman. Create an engaging poll about rucking preferences with specific options related to gear, training methods, or favorite locations. IMPORTANT: Keep response UNDER 200 characters total.",
+        'poll': "Create an engaging poll about rucking preferences. Include specific options related to gear, training methods, or favorite rucking locations. IMPORTANT: Response strictly under 180 characters, clearly formatted as a poll question with options.",
         
-        'meme': "You are a goofy slightly awkward marketing intern and an avid outdoorsman. Create a relatable rucking meme about training struggles or gear preparations with a specific humorous scenario. IMPORTANT: Keep response UNDER 200 characters total.",
+        'meme': "Describe a relatable rucking meme. Focus on training struggles or gear preparations with a specific humorous scenario. Output text for a meme. IMPORTANT: Response strictly under 160 characters.",
         
-        'shoutout': "You are a goofy slightly awkward marketing intern and an avid outdoorsmanGenerate a motivational shout-out for a rucking achievement with specific details about the accomplishment and encouraging words. IMPORTANT: Keep response UNDER 200 characters total.",
-        
-        'ugc': "You are a goofy slightly inept awkward intern and an avid outdoorsman. Create a supportive comment for a user's rucking post with specific feedback about their achievement or effort. IMPORTANT: Keep response UNDER 200 characters total.",
-        
-        'map_post': "You are a goofy slightly awkward marketing intern and an avid outdoorsman. Generate a brief caption for a mapped ruck session, highlighting distance, pace, and achievement. IMPORTANT: Keep response UNDER 200 characters total."
+        # generate_session_post handles its own more complex prompt for shoutouts based on session data.
+        # generate_map_post_text handles its own complex prompt.
+        # generate_reply handles its own complex prompt.
+        # UGC comments are also handled by a different function/prompt in scheduler.py (engage_with_posts)
     }
 
-    # Handle the renamed theme category
-    if content_type == 'theme':
+    if content_type == 'theme': # Legacy handling, should ideally be phased out or mapped better
         content_type = 'health_benefits'
     
-    prompt = base_prompts.get(content_type, base_prompts['pun'])
-    return prompt
+    # Fallback to a generic engagement prompt if content_type not in base_user_prompts
+    # This is important because 'shoutout', 'ugc', 'map_post' are handled by other functions
+    # and 'select_content_type' might still return them.
+    user_prompt = base_user_prompts.get(content_type, f"Write an engaging tweet about {content_type if content_type else 'rucking'}. Include a call to action or a question. #GetRucky")
+    return user_prompt
 
 def get_season(month):
     """Return the current season based on month."""
@@ -331,22 +336,22 @@ Elevation gain: {elevation}m"""
             if location_string_for_prompt == "an awesome spot":
                 example_location_display = "the great outdoors"
 
-            prompt = f"""You are a rucking enthusiast and awkwared marketing intern. Write a short, engaging tweet (around 140-160 characters before stats are added) about the following ruck session.
-Your tweet should start by naturally mentioning the location, but you don't have to use all of it. You can use nicknames or interesting facts like "The sunshise state" or "the land of the rising sun" where appropriate calling out anything interesting about it: '{location_string_for_prompt}'.
-Then, make ONE keen, specific observation about this ruck.
-Session details:
+            # This is the user_prompt for the map post text generation
+            user_prompt = f"""The ruck session was at/in '{location_string_for_prompt}'. Write a short, engaging start to a tweet (around 140-160 characters before stats are added) about this session.
+Your opening should naturally mention the location, calling out anything interesting or well-known about it if possible (e.g. 'Rucking through the historic streets of Madrid...' or 'Conquered some hills in sunny California!').
+Then, make ONE keen, specific observation about the ruck itself based on these details:
 {session_details_for_prompt}
 
-Focus on something impressive, unusual, or notable. Keep the tone enthusiastic and inspiring. End with a relevant hashtag like #GetRucky, #RuckLife or #Rucking.
+Focus on something impressive, unusual, or notable in the session. Keep the tone enthusiastic and inspiring. End with ONE relevant hashtag like #GetRucky, #RuckLife or #Rucking.
 Example for a known location: 'Solid {distance}-mile ruck through {example_location_display}! That {weight}kg pack is no joke. Great discipline! #GetRucky'
 Example for an unknown location: 'Kicking off the day with a Ruck of the day from an awesome spot! {distance} miles logged. That commitment is inspiring! #RuckLife'
-Output ONLY the tweet text (commentary, observation, and one hashtag), ready for detailed stats (like 🏃‍♂️, ⏱️ etc.) to be appended by the system.
+Output ONLY the tweet text (location intro, observation, and one hashtag), ready for detailed stats (like 🏃‍♂️, ⏱️ etc.) to be appended by the system.
 """
 
-            logger.info(f"XAI Prompt for map post: {prompt}")
-            xai_headers = api_client.initialize_xai_client()
-            generated_text = api_client.generate_text(xai_headers, prompt)
-
+            logger.info(f"XAI User Prompt for map post: {user_prompt}")
+            xai_headers = api_client.initialize_xai_client() # Ensure headers are fresh
+            generated_text = api_client.generate_text(xai_headers, user_prompt) # Pass only the user_prompt
+            
             logger.info(f"Generated XAI text for map post: {generated_text}")
 
             if generated_text and len(generated_text) > 10:
