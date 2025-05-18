@@ -341,8 +341,9 @@ def generate_map_image(route_points: List[Tuple[float, float]], session_data: Di
                 logger.info(f"Opening HTML file: {html_path}")
                 driver.get(html_path)
                 
-                # Wait for map to fully load
-                time.sleep(2)
+                # Wait for map to fully load - increased sleep time
+                logger.info("Waiting for map tiles to load...")
+                time.sleep(7) # Increased from 2 to 7 seconds
                 
                 # Create PNG file path
                 png_file = html_file.replace('.html', '.png')
