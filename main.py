@@ -44,6 +44,16 @@ def main():
     """Main function to initialize and run the AI Marketing Bot (full mode with engagement)."""
     global x_client, readonly_client
     logger.info("Starting AI Marketing Bot for @getrucky (full mode with engagement)")
+
+    # Log all available environment variables for the worker dyno
+    logger.info("---Dumping All Environment Variables (Worker Dyno) ---")
+    for key, value in os.environ.items():
+        # For potentially sensitive keys, log only partial info or just their presence
+        if "KEY" in key.upper() or "SECRET" in key.upper() or "TOKEN" in key.upper():
+            logger.info(f"ENV: {key}=<present - length {len(value)}> - First 4: {value[:4] if len(value) > 0 else ''}")
+        else:
+            logger.info(f"ENV: {key}={value}")
+    logger.info("--- End of Environment Variables Dump ---")
     
     # Validate configuration
     logger.info("Validating configuration")
