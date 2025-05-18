@@ -338,9 +338,9 @@ Elevation gain: {elevation}m"""
 
             # This is the user_prompt for the map post text generation
             user_prompt = f"""The ruck session was at/in '{location_string_for_prompt}'. Write a short, engaging start to a tweet (around 140-160 characters before stats are added) about this session.
-Your opening should naturally mention the location, calling out anything interesting or well-known about it if possible (e.g. 'Rucking through the historic streets of Madrid...' or 'Conquered some hills in sunny California!').
+Your opening should naturally mention the location, calling out anything interesting or well-known about it if possible (e.g. 'Rucking through the historic streets of Madrid...' or 'Conquered some hills in sunny California!') or quote a famous author or movie line about that place if possible
 Then, make ONE keen, specific observation about the ruck itself based on these details:
-{session_details_for_prompt}
+{session_details_for_prompt}    
 
 Focus on something impressive, unusual, or notable in the session. Keep the tone enthusiastic and inspiring. End with ONE relevant hashtag like #GetRucky, #RuckLife or #Rucking.
 Example for a known location: 'Solid {distance}-mile ruck through {example_location_display}! That {weight}kg pack is no joke. Great discipline! #GetRucky'
