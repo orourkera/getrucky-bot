@@ -117,49 +117,55 @@ def get_session_route_points(client: Client, session_id: str) -> List[Tuple[floa
         return []
 
 def geocode_coordinates(latitude: float, longitude: float) -> Dict[str, str]:
-    """Geocode coordinates to get city, state, country using a free geocoding API.
-    
-    Args:
-        latitude: The latitude coordinate
-        longitude: The longitude coordinate
-        
-    Returns:
-        A dictionary with keys 'city', 'state', and 'country'
-    """
+    """Geocode coordinates to get city, state, country, and potentially a specific feature name."""
     try:
-        # Use the free OpenStreetMap Nominatim API for geocoding
-        # Rate limit is 1 request per second, which is fine for our use case
-        url = f"https://nominatim.openstreetmap.org/reverse?lat={latitude}&lon={longitude}&format=json"
-        
+        url = f"https://nominatim.openstreetmap.org/reverse?lat={latitude}&lon={longitude}&format=json&addressdetails=1"
         headers = {
-            "User-Agent": "GetruckyBot/1.0",  # Nominatim requires a User-Agent
-            "Accept-Language": "en-US,en"  # Get English names
+            "User-Agent": "GetruckyBot/1.0",
+            "Accept-Language": "en-US,en"
         }
-        
-        response = requests.get(url, headers=headers, timeout=5)
+        response = requests.get(url, headers=headers, timeout=10) # Increased timeout slightly
         response.raise_for_status()
-        
         result = response.json()
-        
-        # Extract location components
         address = result.get('address', {})
+
+        feature_name = ""
+        # Prioritize specific, significant features. Order matters.
+        poi_priority = [
+            'national_park', 'park', 'forest', 'nature_reserve', 'conservation', 
+            'state_park', 'mountain_range', 'peak', 'island', 'beach', 'historic', 'archaeological_site'
+            # 'tourism' and 'leisure' can be too broad or might be shops/restaurants
+        ]
+        for key in poi_priority:
+            if address.get(key):
+                feature_name = address.get(key)
+                break
+        
+        # Get standard administrative areas
         city = address.get('city', address.get('town', address.get('village', address.get('hamlet', ''))))
+        county = address.get('county', '') # Often useful if city is small or not present
         state = address.get('state', '')
         country = address.get('country', '')
-        
-        logger.info(f"Geocoded coordinates ({latitude}, {longitude}) to {city}, {state}, {country}")
+
+        # If no specific feature, but we have a suburb/neighbourhood, that can be useful detail
+        if not feature_name and not city: # Only if city is also missing
+            sub_feature = address.get('suburb', address.get('neighbourhood', ''))
+            if sub_feature:
+                feature_name = sub_feature # Use it as a less specific feature
+
+        logger.info(f"Geocoded ({latitude}, {longitude}): Feature='{feature_name}', City='{city}', County='{county}', State='{state}', Country='{country}'")
         
         return {
+            'feature': feature_name or "",
             'city': city or "",
+            'county': county or "",
             'state': state or "",
             'country': country or ""
         }
     except Exception as e:
-        logger.error(f"Error geocoding coordinates: {e}")
+        logger.error(f"Error geocoding coordinates: {e} (URL: {url if 'url' in locals() else 'not set'})")
         return {
-            'city': "",
-            'state': "",
-            'country': ""
+            'feature': "", 'city': "", 'county': "", 'state': "", 'country': ""
         }
 
 def get_location_from_session(client: Client, session_id: str) -> Dict[str, str]:

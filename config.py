@@ -43,7 +43,7 @@ LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
 PAPERTRAIL_API_TOKEN = os.getenv('PAPERTRAIL_API_TOKEN', '')
 
 # Bot Configuration Constants
-POST_FREQUENCY = range(5, 11)  # 5-10 posts per day
+POST_FREQUENCY = range(4, 5)  # Ensures exactly 4 posts per day (1 map/session + 3 regular)
 SEARCH_TERMS = ["ruck", "rucking", "#rucking", "#rucklife"]
 MAX_REPLIES = 50  # Max replies per hour
 
