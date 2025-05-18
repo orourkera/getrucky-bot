@@ -58,10 +58,33 @@ def main():
     # Validate configuration
     logger.info("Validating configuration")
     config_status = validate_config()
-    if not all(config_status.values()):
-        logger.error("Missing required environment variables. Please check the configuration.")
+    
+    # Determine if critical configuration is missing
+    # Logic for this is now within validate_config, let's use a simpler check here
+    # based on the expectation that validate_config correctly identifies critical issues.
+    # We can refine this by having validate_config return a more explicit critical_failure flag.
+    
+    # For now, let's assume validate_config correctly logs and we check its overall status
+    # If any key (even optional ones for full functionality) is reported as missing by current validate_config structure, it will fail all().
+    # Let's make the exit condition in main.py depend on the *critical* assessment inside validate_config.
+
+    # A better approach: validate_config could return two statuses or a more structured object.
+    # Quick fix: Re-evaluate critical nature here based on what we know is essential for core operation.
+    essential_keys_present = all([
+        config_status.get('X_API_KEY', False),
+        config_status.get('X_API_SECRET', False),
+        config_status.get('X_ACCESS_TOKEN', False),
+        config_status.get('X_ACCESS_TOKEN_SECRET', False),
+        config_status.get('AI_API_KEY', False) # This checks if at least one AI key (XAI or GROQ) is present
+    ])
+
+    if not essential_keys_present:
+        logger.error("CRITICAL environment variables missing. Worker process will exit. Check logs from validate_config for details.")
         sys.exit(1)
-    logger.info("Configuration validated successfully")
+    elif not all(config_status.values()): # Some non-critical (e.g., map-related) keys might be missing
+        logger.warning("Some non-critical environment variables might be missing (e.g., for map functionality). Bot will attempt to continue. Check logs from validate_config.")
+    else:
+        logger.info("Configuration validated successfully")
     
     # Initialize databases
     logger.info("Initializing databases")

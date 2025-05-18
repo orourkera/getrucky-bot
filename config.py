@@ -27,7 +27,7 @@ GROQ_API_KEY = os.getenv('GROQ_API_KEY', '')  # Added Groq API key as an alterna
 # Supabase and Stadia Maps credentials
 SUPABASE_URL = os.getenv('SUPABASE_URL', '')
 SUPABASE_KEY = os.getenv('SUPABASE_KEY', '')
-STADIA_API_KEY = os.getenv('STADIA_API_KEY', '')
+STADIA_MAPS_API_KEY = os.getenv('STADIA_MAPS_API_KEY', '')
 
 # Database Configuration
 DATABASE_URL = os.getenv('DATABASE_URL', '')
@@ -171,10 +171,10 @@ def validate_config():
             logger.info(f"Found GROQ_API_KEY: {groq_key_val[:4]}...{groq_key_val[-4:]}")
     status['AI_API_KEY'] = has_ai_key
     
-    logger.info("Checking Map functionality keys (SUPABASE_URL, SUPABASE_KEY, STADIA_API_KEY)...")
+    logger.info("Checking Map functionality keys (SUPABASE_URL, SUPABASE_KEY, STADIA_MAPS_API_KEY)...")
     supabase_url_val = os.getenv('SUPABASE_URL')
     supabase_key_val = os.getenv('SUPABASE_KEY') 
-    stadia_key_val = os.getenv('STADIA_API_KEY')
+    stadia_key_val = os.getenv('STADIA_MAPS_API_KEY')
     
     has_map_keys = bool(supabase_url_val and supabase_key_val and stadia_key_val)
     if not supabase_url_val:
@@ -188,10 +188,10 @@ def validate_config():
     else:
         logger.info(f"Found SUPABASE_KEY: {supabase_key_val[:4]}...{supabase_key_val[-4:]}")
     if not stadia_key_val:
-        logger.error("Missing Map Key: STADIA_API_KEY is not set.")
+        logger.error("Missing Map Key: STADIA_MAPS_API_KEY is not set.")
         all_present = False
     else:
-        logger.info(f"Found STADIA_API_KEY: {stadia_key_val[:4]}...{stadia_key_val[-4:]}")
+        logger.info(f"Found STADIA_MAPS_API_KEY: {stadia_key_val[:4]}...{stadia_key_val[-4:]}")
     status['MAP_KEYS'] = has_map_keys
     
     if not all_present:
