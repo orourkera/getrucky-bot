@@ -259,45 +259,6 @@ def generate_map_image(route_points: List[Tuple[float, float]], session_data: Di
             popup=folium.Popup(end_html, max_width=300)
         ).add_to(m)
         
-        # Add a heat map layer for route intensity if enough points
-        if len(route_points) > 10:
-            HeatMap(route_points, radius=15, blur=10, max_zoom=13).add_to(m)
-        
-        # Add a session stats info box with styling suitable for Stamen Terrain
-        distance = session_data.get('distance', '0')
-        duration = session_data.get('duration', '0h')
-        pace = session_data.get('pace', 'N/A')
-        ruck_weight = session_data.get('ruck_weight', '0')
-        elevation_gain = session_data.get('elevation_gain', '0')
-        
-        stats_html = f"""
-        <div style="
-            position: absolute; 
-            bottom: 30px; 
-            left: 10px; 
-            z-index: 1000;
-            background-color: rgba(255, 255, 255, 0.9); /* Slightly more opaque white for Stamen Terrain */
-            color: #2F2F2F; /* Darker text for better contrast on white */
-            padding: 10px;
-            border-radius: 8px;
-            font-family: Arial, sans-serif;
-            font-size: 13px; 
-            width: 200px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.35);
-            border-left: 4px solid #B85B24; /* Darker shade of route color for accent */
-        ">
-            <h4 style="margin: 0 0 8px 0; color: #A04E1D; font-size: 15px;">Ruck Stats</h4>
-            <div style="margin-bottom: 4px;">🏃‍♂️ <b>Distance:</b> {distance} miles</div>
-            <div style="margin-bottom: 4px;">⏱️ <b>Duration:</b> {duration}</div>
-            <div style="margin-bottom: 4px;">⚡ <b>Pace:</b> {pace}/mi</div>
-            <div style="margin-bottom: 4px;">🎒 <b>Weight:</b> {ruck_weight}kg</div>
-            {f'<div>⛰️ <b>Elevation:</b> {elevation_gain}m</div>' if float(elevation_gain) > 0 else ''}
-        </div>
-        """
-        
-        # Add the stats HTML as a custom div
-        m.get_root().html.add_child(folium.Element(stats_html))
-        
         # Add a title and branding to the map
         title_html = f"""
         <div style="
