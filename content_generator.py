@@ -219,7 +219,7 @@ def get_prompt_for_content_type(content_type, theme=None):
     # Fallback to a generic engagement prompt if content_type not in base_user_prompts
     # This is important because 'shoutout', 'ugc', 'map_post' are handled by other functions
     # and 'select_content_type' might still return them.
-    user_prompt = base_user_prompts.get(content_type, f"Write an engaging tweet about {content_type if content_type else 'rucking'}. Include a call to action or a question. #GetRucky")
+    user_prompt = base_user_prompts.get(content_type, f"Write an engaging tweet about {content_type if content_type else 'rucking'}. Include a call to action or a question. #GoRuckYourself")
     return user_prompt
 
 def get_season(month):
