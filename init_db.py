@@ -229,6 +229,26 @@ def initialize_model_cache_db():
         logger.error(f"Error initializing model_cache.db: {e}")
         return False
 
+def initialize_engagement_table():
+    """Initialize the engagement table in analytics.db to track likes, comments, and retweets."""
+    try:
+        conn = sqlite3.connect(DB_PATHS['analytics'])
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS engagement (
+                tweet_id TEXT,
+                action TEXT,
+                timestamp TIMESTAMP
+            )
+        """)
+        conn.commit()
+        conn.close()
+        logger.info("Successfully initialized engagement table in analytics.db")
+        return True
+    except Exception as e:
+        logger.error(f"Error initializing engagement table: {e}")
+        return False
+
 def main():
     """Main function to initialize all databases."""
     logger.info("Starting database initialization...")
@@ -242,6 +262,9 @@ def main():
     initialize_interaction_log_db()
     initialize_analytics_db()
     initialize_model_cache_db()
+    
+    # Call the function to initialize the engagement table
+    initialize_engagement_table()
     
     logger.info("Database initialization completed.")
     
