@@ -20,10 +20,23 @@ def main():
     # Step 1: Validate configuration
     logger.info("Validating configuration")
     config_status = validate_config()
-    if not all(config_status.values()):
-        logger.error("Missing required environment variables. Please check the configuration.")
+    # Check for essential keys only for script execution
+    essential_keys_present = all([
+        config_status.get('X_API_KEY', False),
+        config_status.get('X_API_SECRET', False),
+        config_status.get('X_ACCESS_TOKEN', False),
+        config_status.get('X_ACCESS_TOKEN_SECRET', False),
+        config_status.get('AI_API_KEY', False) # Checks if OPENAI_API_KEY is present
+    ])
+
+    if not essential_keys_present:
+        logger.error("Missing essential (X API or AI API) environment variables. Please check the configuration. Exiting force_post.")
         sys.exit(1)
-    logger.info("Configuration validated successfully")
+    
+    if not config_status.get('MAP_KEYS', True):
+        logger.warning("Map-related API keys (SUPABASE or STADIA) are missing. Map post functionality might be affected, but proceeding with force_post.")
+
+    logger.info("Essential configuration validated successfully for force_post.")
     
     # Step 2: Initialize databases
     logger.info("Initializing databases")
@@ -62,7 +75,7 @@ def main():
             logger.warning("X client may not be properly configured with OAuth 1.0a")
             # Proceed anyway, but log the warning
         
-        xai_client = api_client.initialize_xai_client()
+        ai_client_headers = api_client.initialize_ai_client()
         logger.info("API clients initialized successfully")
     except Exception as e:
         logger.error(f"Failed to initialize API clients: {e}")
@@ -72,7 +85,7 @@ def main():
     logger.info("Posting a test tweet with full tracking")
     try:
         content_type, theme = content_generator.select_content_type()
-        post_text = content_generator.generate_post(xai_client, content_type, theme)
+        post_text = content_generator.generate_post(ai_client_headers, content_type, theme)
         
         logger.info(f"Generated post text for content type '{content_type}': {post_text[:50]}...")
         

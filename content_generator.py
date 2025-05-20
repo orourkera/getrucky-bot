@@ -6,7 +6,7 @@ import sqlite3
 import os
 from datetime import datetime
 import api_client
-from config import CONTENT_WEIGHTS, WEEKLY_THEMES, POST_FREQUENCY
+from config import CONTENT_WEIGHTS, WEEKLY_THEMES, POST_FREQUENCY, AI_PROVIDER, OPENAI_API_KEY, GROQ_API_KEY
 import config
 
 logger = logging.getLogger(__name__)
@@ -36,7 +36,7 @@ def select_content_type():
                 return content_type, None
         return 'pun', None  # Default fallback
 
-def generate_post(xai_headers, content_type, theme=None):
+def generate_post(ai_headers, content_type, theme=None):
     """Generate a post based on the specified content type."""
     # Special case for map posts - we don't use the xAI API for these
     if content_type == 'map_post':
@@ -62,13 +62,13 @@ def generate_post(xai_headers, content_type, theme=None):
         return cached_response
 
     try:
-        text = api_client.generate_text(xai_headers, prompt)
+        text = api_client.generate_text(ai_headers, prompt)
         if text and len(text) > 50:
             cache_response(prompt, text)
-            logger.info(f"Generated {content_type} post with xAI API")
+            logger.info(f"Generated {content_type} post with {AI_PROVIDER} API")
             return text
     except Exception as e:
-        logger.error(f"Failed to generate {content_type} post with xAI API: {e}")
+        logger.error(f"Failed to generate {content_type} post with {AI_PROVIDER} API: {e}")
         # Fall through to template-based backup
 
     # Fallback to template from pun_library.db
@@ -76,7 +76,7 @@ def generate_post(xai_headers, content_type, theme=None):
     logger.warning(f"Using template fallback for {content_type} post due to API failure")
     return template
 
-def generate_session_post(xai_headers, session_data):
+def generate_session_post(ai_headers, session_data):
     """Generate a shout-out post for a ruck session with achievements and milestones."""
     user = session_data.get('user', 'RuckStar')
     distance = session_data.get('distance', '5')
@@ -110,13 +110,13 @@ End with ONE hashtag. IMPORTANT: Response strictly under 180 characters."""
         return cached_response
     
     try:
-        text = api_client.generate_text(xai_headers, prompt)
+        text = api_client.generate_text(ai_headers, prompt)
         if text:
             cache_response(prompt, text)
-            logger.info(f"Generated session post with xAI API for {user}")
+            logger.info(f"Generated session post with {AI_PROVIDER} API for {user}")
             return text
     except Exception as e:
-        logger.error(f"Failed to generate session post with xAI API: {e}")
+        logger.error(f"Failed to generate session post with {AI_PROVIDER} API: {e}")
     
     # Enhanced fallback template
     template = get_random_template('post', 'shoutout')
@@ -128,7 +128,7 @@ End with ONE hashtag. IMPORTANT: Response strictly under 180 characters."""
         emoji="🏆" if achievements else "🥾"
     )
 
-def generate_reply(xai_headers, tweet_text, sentiment, content_type=None, sentiment_context=None):
+def generate_reply(ai_headers, tweet_text, sentiment, content_type=None, sentiment_context=None):
     """Generate a reply based on sentiment, content type, and context."""
     # Build context-aware prompt
     prompt_parts = []
@@ -163,7 +163,7 @@ def generate_reply(xai_headers, tweet_text, sentiment, content_type=None, sentim
             prompt_parts.append("matching their tone")
     
     # Construct final user prompt for the reply generation task
-    user_prompt = f"The user tweeted: '{tweet_text}'. My sentiment analysis is: '{sentiment}' with context: {sentiment_context}. Generate a reply that is {' '.join(prompt_parts)}. IMPORTANT: Response strictly under 260 characters."
+    user_prompt = f"The user tweeted: '{tweet_text}'. My sentiment analysis is: '{sentiment}' with context: {sentiment_context}. Generate a reply that is {' '.join(prompt_parts)}. IMPORTANT: Response strictly under 240 characters."
     
     cached_response = get_cached_response(user_prompt)
     if cached_response:
@@ -171,13 +171,13 @@ def generate_reply(xai_headers, tweet_text, sentiment, content_type=None, sentim
         return cached_response
     
     try:
-        text = api_client.generate_text(xai_headers, user_prompt)
+        text = api_client.generate_text(ai_headers, user_prompt)
         if text:
             cache_response(user_prompt, text)
-            logger.info(f"Generated {sentiment} reply with xAI API")
+            logger.info(f"Generated {sentiment} reply with {AI_PROVIDER} API")
             return text
     except Exception as e:
-        logger.error(f"Failed to generate {sentiment} reply with xAI API: {e}")
+        logger.error(f"Failed to generate {sentiment} reply with {AI_PROVIDER} API: {e}")
     
     # Enhanced fallback template selection based on sentiment
     template_category = 'positive' if sentiment.startswith(('very_positive', 'positive')) else \
@@ -197,15 +197,15 @@ def get_prompt_for_content_type(content_type, theme=None):
     # These prompts are now just the *user* part of the request
     # The base persona is handled by api_client.generate_text
     base_user_prompts = {
-        'pun': "Create a witty rucking pun. Focus on rhymes with ruck/rucking or rucking concepts. Make it smile-worthy for fellow ruckers. IMPORTANT: Response strictly under 160 characters.",
+        'pun': "Create a witty rucking pun. Focus on rhymes with ruck/rucking or rucking concepts. Make it smile-worthy for fellow ruckers. IMPORTANT: Response strictly under 240 characters.",
         
-        'challenge': f"Generate a {season}-themed rucking challenge. It should encourage community participation with specific, measurable goals. IMPORTANT: Response strictly under 180 characters.",
+        'challenge': f"Generate a {season}-themed rucking challenge. It should encourage community participation with specific, measurable goals. IMPORTANT: Response strictly under 240 characters.",
         
-        'health_benefits': f"Write a post about the {theme if theme else 'general'} health and fitness benefits of rucking. Include ONE specific fact or statistic. IMPORTANT: Response strictly under 180 characters.",
+        'health_benefits': f"Write a post about the {theme if theme else 'general'} health and fitness benefits of rucking. Include ONE specific fact or statistic and cite the study. IMPORTANT: Response strictly under 240 characters.",
         
-        'poll': "Create an engaging poll about rucking preferences. Include specific options related to gear, training methods, or favorite rucking locations. IMPORTANT: Response strictly under 180 characters, clearly formatted as a poll question with options.",
+        'poll': "Create an engaging poll about rucking preferences. Include specific options related to gear, training methods, or favorite rucking locations. IMPORTANT: Response strictly under 240 characters, clearly formatted as a poll question with options.",
         
-        'meme': "Describe a relatable rucking meme. Focus on training struggles or gear preparations with a specific humorous scenario. Output text for a meme. IMPORTANT: Response strictly under 160 characters.",
+        'meme': "Describe a relatable rucking meme. Focus on training struggles or gear preparations with a specific humorous scenario. Output text for a meme. IMPORTANT: Response strictly under 240 characters.",
         
         # generate_session_post handles its own more complex prompt for shoutouts based on session data.
         # generate_map_post_text handles its own complex prompt.
@@ -312,7 +312,19 @@ def generate_map_post_text(session_data):
     
     post_text = ""
 
-    if 'XAI_API_KEY' in os.environ or 'GROQ_API_KEY' in os.environ:
+    # Check if either OpenAI or Groq key is available, prioritizing OpenAI
+    # AI_PROVIDER from config.py should guide this more cleanly
+    if AI_PROVIDER == "openai" and OPENAI_API_KEY:
+        effective_api_source = "OpenAI"
+    elif AI_PROVIDER == "groq" and GROQ_API_KEY: # Assuming we might add Groq back as a specific provider
+        effective_api_source = "Groq"
+    # elif XAI_API_KEY: # Original xAI, now deprecated in favor of OpenAI/Groq distinction
+        # effective_api_source = "xAI"
+    else:
+        effective_api_source = None 
+        logger.warning(f"No suitable AI API key found (checked OpenAI, Groq). Map post text generation will use fallback.")
+
+    if effective_api_source:
         try:
             session_details_for_prompt = f"""
 Distance: {distance} miles
@@ -348,23 +360,23 @@ Example for an unknown location: 'Kicking off the day with a Ruck of the day fro
 Output ONLY the tweet text (location intro, observation, and one hashtag), ready for detailed stats (like 🏃‍♂️, ⏱️ etc.) to be appended by the system.
 """
 
-            logger.info(f"XAI User Prompt for map post: {user_prompt}")
-            xai_headers = api_client.initialize_xai_client() # Ensure headers are fresh
-            generated_text = api_client.generate_text(xai_headers, user_prompt) # Pass only the user_prompt
+            logger.info(f"{effective_api_source} User Prompt for map post: {user_prompt}")
+            ai_headers = api_client.initialize_ai_client() # Ensure headers are fresh for the active provider
+            generated_text = api_client.generate_text(ai_headers, user_prompt) # Pass only the user_prompt
             
-            logger.info(f"Generated XAI text for map post: {generated_text}")
+            logger.info(f"Generated {effective_api_source} text for map post: {generated_text}")
 
             if generated_text and len(generated_text) > 10:
                 post_text = generated_text.strip()
             else:
-                logger.warning("XAI generation failed or response too short, using fallback.")
+                logger.warning(f"{effective_api_source} generation failed or response too short, using fallback.")
                 default_location_intro = "Ruck of the day"
                 if location_string_for_prompt != "an awesome spot":
                     default_location_intro = f"Ruck of the day from {location_string_for_prompt}."
                 post_text = f"{default_location_intro} Showing some serious dedication! #GetRucky"
 
         except Exception as e:
-            logger.error(f"Error generating XAI text for map post: {e}")
+            logger.error(f"Error generating {effective_api_source} text for map post: {e}")
             default_location_intro = "Ruck of the day"
             if city:
                 location_string_fallback = f"{city}, {state}, {country}" if city and state and country else f"{city}, {country}" if city and country else city
@@ -372,7 +384,7 @@ Output ONLY the tweet text (location intro, observation, and one hashtag), ready
                     default_location_intro = f"Ruck of the day from {location_string_fallback}."
             post_text = f"{default_location_intro} Pushing limits and loving it! #GetRucky"
     else:
-        logger.warning("XAI_API_KEY or GROQ_API_KEY not in environment, using fallback for map post text.")
+        # This block executes if no API key was found (already logged above)
         default_location_intro = "Ruck of the day"
         location_string_for_fallback = ""
         if city and state and country:
@@ -416,7 +428,7 @@ Output ONLY the tweet text (location intro, observation, and one hashtag), ready
     combined_text = f"{post_text} {stats}"
     
     # Make sure it's under the character limit
-    max_length = 260  # Increased from 200 to allow more content
+    max_length = 276  # Allow more room for map posts, actual truncation near 280 happens elsewhere if needed by Twitter.
     if len(combined_text) > max_length:
         # Calculate how much space is needed for essential information
         essential_length = len(post_text) + 20  # Allow some minimal space for most important stats

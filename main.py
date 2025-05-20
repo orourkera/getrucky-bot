@@ -111,7 +111,7 @@ def main():
     # Schedule content posts for the day
     post_times = get_post_times()
     logger.info(f"Selected {len(post_times)} post times for today")
-    scheduler.schedule_posts(scheduler_instance, x_client, None, api_client.initialize_xai_client())
+    scheduler.schedule_posts(scheduler_instance, x_client, None, api_client.initialize_ai_client())
     
     # Schedule engagement tasks with rate limiting safeguards
     # Run engagement 3 times a day (every 8 hours) to avoid API rate limits
@@ -139,8 +139,8 @@ def main():
                     return
             
             # If safe, proceed with engagement
-            xai_headers = api_client.initialize_xai_client()
-            result = scheduler.engage_with_posts(readonly_client or x_client, xai_headers)
+            ai_headers = api_client.initialize_ai_client()
+            result = scheduler.engage_with_posts(readonly_client or x_client, ai_headers)
             logger.info(f"Engagement completed: {result}")
         except Exception as e:
             logger.error(f"Error in safe engagement: {e}")

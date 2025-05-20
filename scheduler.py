@@ -11,7 +11,7 @@ import os
 logger = logging.getLogger(__name__)
 
 
-def schedule_posts(scheduler, x_client, app_client, xai_headers):
+def schedule_posts(scheduler, x_client, app_client, ai_headers):
     """Schedule regular and session-based posts for the day, ensuring one map post attempt."""
     try:
         num_posts = random.choice(POST_FREQUENCY)  # Randomly select number of posts (5-10)
@@ -29,7 +29,7 @@ def schedule_posts(scheduler, x_client, app_client, xai_headers):
             'cron',
             hour=hour,
             minute=minute,
-            args=[x_client, app_client, xai_headers],
+            args=[x_client, app_client, ai_headers],
             id=f'dedicated_map_post_{hour}_{minute}'
         )
         logger.info(f"Scheduled dedicated session/map post attempt at {hour}:{minute:02d} UTC")
@@ -43,7 +43,7 @@ def schedule_posts(scheduler, x_client, app_client, xai_headers):
                 'cron',
                 hour=hour,
                 minute=minute,
-                args=[x_client, xai_headers],
+                args=[x_client, ai_headers],
                 id=f'regular_post_{hour}_{minute}_{i}' # Ensure unique ID
             )
             logger.info(f"Scheduled regular post at {hour}:{minute:02d} UTC")
@@ -52,26 +52,26 @@ def schedule_posts(scheduler, x_client, app_client, xai_headers):
     except Exception as e:
         logger.error(f"Error scheduling posts: {e}")
 
-def schedule_engagement(scheduler, x_client, xai_headers):
+def schedule_engagement(scheduler, x_client, ai_headers):
     """Schedule engagement tasks to run every 2 hours."""
     try:
         scheduler.add_job(
             engage_with_posts,
             'interval',
             hours=2,
-            args=[x_client, xai_headers],
+            args=[x_client, ai_headers],
             id='engagement_task'
         )
         logger.info("Scheduled engagement task to run every 2 hours")
     except Exception as e:
         logger.error(f"Error scheduling engagement task: {e}")
 
-def post_regular_content(x_client, xai_headers):
+def post_regular_content(x_client, ai_headers):
     """Generate and post regular content."""
     try:
         content_type, theme = content_generator.select_content_type()
         try:
-            post_result = content_generator.generate_post(xai_headers, content_type, theme)
+            post_result = content_generator.generate_post(ai_headers, content_type, theme)
             
             # Check if this is a map post
             if isinstance(post_result, dict) and post_result.get('is_map_post'):
@@ -120,7 +120,7 @@ def post_map_content(x_client, session_data, map_path):
         logger.error(f"Error posting map content: {e}")
         return None
 
-def post_session_content(x_client, app_client, xai_headers):
+def post_session_content(x_client, app_client, ai_headers):
     """Fetch ruck session data and post about it with enhanced achievement tracking."""
     try:
         # Try to get a session from Supabase first (if integration is available)
@@ -187,7 +187,7 @@ def post_session_content(x_client, app_client, xai_headers):
             if not long_enough_sessions:
                 logger.warning("No sessions found that are longer than 5 minutes")
                 # Fallback to regular content with seasonal theme
-                return post_regular_content(x_client, xai_headers)
+                return post_regular_content(x_client, ai_headers)
             
             # Sort sessions by achievements to prioritize more significant ones
             long_enough_sessions.sort(key=lambda s: (
@@ -210,7 +210,7 @@ def post_session_content(x_client, app_client, xai_headers):
             if 'streak' not in session:
                 session['streak'] = '0'
             
-            post_text = content_generator.generate_session_post(xai_headers, session)
+            post_text = content_generator.generate_session_post(ai_headers, session)
             
             # Final check to ensure it's under the limit
             if len(post_text) > 280:
@@ -222,13 +222,13 @@ def post_session_content(x_client, app_client, xai_headers):
         else:
             logger.warning("No ruck sessions available for posting")
             # Fallback to regular content with seasonal theme
-            return post_regular_content(x_client, xai_headers)
+            return post_regular_content(x_client, ai_headers)
     except Exception as e:
         logger.error(f"Error posting session content: {e}")
         # Fallback to regular content on error
-        return post_regular_content(x_client, xai_headers)
+        return post_regular_content(x_client, ai_headers)
 
-def engage_with_posts(x_client, xai_headers):
+def engage_with_posts(x_client, ai_headers):
     """Engage with posts by liking, retweeting, and commenting."""
     from config import SEARCH_TERMS, LIKE_PROBABILITY, RETWEET_ACCOUNTS, MIN_FOLLOWERS
     from analytics import store_engagement_action, get_engagement_actions
@@ -270,7 +270,7 @@ def engage_with_posts(x_client, xai_headers):
                 comment_text = content_generator.get_cached_response(user_prompt_for_comment)
                 if not comment_text:
                     # api_client.generate_text will add the base persona
-                    comment_text = api_client.generate_text(xai_headers, user_prompt_for_comment) 
+                    comment_text = api_client.generate_text(ai_headers, user_prompt_for_comment)
                     content_generator.cache_response(user_prompt_for_comment, comment_text)
                 
                 # Final check for length before posting

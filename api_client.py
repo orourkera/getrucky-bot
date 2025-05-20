@@ -6,7 +6,7 @@ from requests_oauthlib import OAuth1
 import logging
 import time
 from typing import Optional
-from config import X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRET, APP_API_TOKEN, XAI_API_KEY, get_config, X_BEARER_TOKEN, GROQ_API_KEY, XAI_BASE_PERSONA, XAI_MODEL_NAME
+from config import X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRET, APP_API_TOKEN, OPENAI_API_KEY, get_config, X_BEARER_TOKEN, AI_BASE_PERSONA, OPENAI_MODEL_NAME, AI_PROVIDER
 import datetime
 import os
 
@@ -341,77 +341,68 @@ def get_session_details(headers, session_id):
         logger.error(f"Error fetching session details for {session_id}: {e}")
         return {}
 
-# xAI API Client
-def initialize_xai_client():
-    """Initialize and return xAI API client."""
-    # Prioritize XAI_API_KEY, but fall back to GROQ_API_KEY if XAI_API_KEY is not set
-    api_key_to_use = XAI_API_KEY
-    api_source = "xAI"
-    if not api_key_to_use and GROQ_API_KEY:
-        api_key_to_use = GROQ_API_KEY
-        api_source = "Groq"
-        logger.info("XAI_API_KEY not found, using GROQ_API_KEY as fallback.")
-    elif not api_key_to_use:
-        logger.error("Neither XAI_API_KEY nor GROQ_API_KEY are set. Cannot initialize AI client.")
-        raise ValueError("Missing AI API Key (XAI_API_KEY or GROQ_API_KEY required)")
+# AI API Client (supporting OpenAI)
+def initialize_ai_client():
+    """Initialize and return AI API client (now supporting OpenAI)."""
+    if AI_PROVIDER == "openai":
+        if not OPENAI_API_KEY:
+            logger.error("OPENAI_API_KEY not set. Cannot initialize OpenAI client.")
+            raise ValueError("Missing OpenAI API Key (OPENAI_API_KEY required)")
+        try:
+            headers = {
+                'Authorization': f'Bearer {OPENAI_API_KEY}',
+                'Content-Type': 'application/json'
+            }
+            logger.info("OpenAI API client initialized")
+            return headers
+        except Exception as e:
+            logger.error(f"Failed to initialize OpenAI API client: {e}")
+            raise
+    else:
+        logger.error(f"Unsupported AI_PROVIDER: {AI_PROVIDER}")
+        raise ValueError(f"Unsupported AI_PROVIDER: {AI_PROVIDER}")
 
-    try:
-        headers = {
-            'Authorization': f'Bearer {api_key_to_use}',
-            'Content-Type': 'application/json'
-        }
-        logger.info(f"{api_source} API client initialized")
-        return headers
-    except Exception as e:
-        logger.error(f"Failed to initialize {api_source} API client: {e}")
-        raise
+def generate_text(ai_headers, user_prompt):
+    """Generate text using the configured AI API with a base system persona and a user-specific prompt."""
+    from config import AI_BASE_PERSONA, OPENAI_MODEL_NAME, AI_PROVIDER # Re-import for clarity
 
-def generate_text(xai_headers, user_prompt):
-    """Generate text using the xAI API with a base system persona and a user-specific prompt."""
-    from config import XAI_BASE_PERSONA, XAI_MODEL_NAME # Import here to avoid circular dependency at top level
-    try:
-        url = "https://api.x.ai/v1/chat/completions" # Default to xAI
-        model_name = XAI_MODEL_NAME
-        
-        # Check if headers indicate Groq API key is being used (based on initialize_xai_client logic)
-        # This is a bit indirect; a more robust way would be to pass the api_source or key type
-        if xai_headers.get('Authorization', '').startswith('Bearer ') and GROQ_API_KEY and xai_headers['Authorization'][7:] == GROQ_API_KEY:
-            url = "https://api.groq.com/openai/v1/chat/completions"
-            # Potentially use a different model name for Groq if needed, e.g., "mixtral-8x7b-32768"
-            # For now, assume XAI_MODEL_NAME is compatible or Groq handles it.
-            logger.info(f"generate_text detected Groq API key, using URL: {url}")
+    if AI_PROVIDER == "openai":
+        try:
+            url = "https://api.openai.com/v1/chat/completions"
+            model_name = OPENAI_MODEL_NAME
 
-        payload = {
-            "model": model_name,
-            "messages": [
-                {"role": "system", "content": XAI_BASE_PERSONA},
-                {"role": "user", "content": user_prompt} # user_prompt is now the task-specific part
-            ],
-            "temperature": 0.7,
-            "max_tokens": 250, 
-            "top_p": 1
-        }
-        
-        response = requests.post(url, headers=xai_headers, json=payload, timeout=30)
-        
-        if response.status_code == 200:
-            response_json = response.json()
-            if 'choices' in response_json and len(response_json['choices']) > 0:
-                model_response = response_json['choices'][0]['message']['content'].strip()
-                logger.info(f"Successfully generated text ({len(model_response)} chars) using {model_name} via {url.split('//')[1].split('/')[0]})" ) 
-                return model_response
+            payload = {
+                "model": model_name,
+                "messages": [
+                    {"role": "system", "content": AI_BASE_PERSONA},
+                    {"role": "user", "content": user_prompt}
+                ],
+                "temperature": 0.7,
+                "max_tokens": 250, # Max tokens for the generated text itself
+                "top_p": 1
+            }
+            
+            response = requests.post(url, headers=ai_headers, json=payload, timeout=30)
+            
+            if response.status_code == 200:
+                response_json = response.json()
+                if 'choices' in response_json and len(response_json['choices']) > 0:
+                    model_response = response_json['choices'][0]['message']['content'].strip()
+                    logger.info(f"Successfully generated text ({len(model_response)} chars) using {model_name} via OpenAI")
+                    return model_response
+                else:
+                    logger.error(f"Unexpected OpenAI API response format: {response_json}")
+                    return None
             else:
-                logger.error(f"Unexpected API response format: {response_json} from {url}")
-                return None # Fallback handled by caller if necessary
-        else:
-            error_msg = f"API request failed: {response.status_code} - {response.text} from {url}"
-            logger.error(error_msg)
-            # No automatic fallback to Groq here, as this function might already be using Groq if XAI_API_KEY was missing.
-            # The caller (e.g., content_generator) should handle final fallbacks to templates.
+                error_msg = f"OpenAI API request failed: {response.status_code} - {response.text}"
+                logger.error(error_msg)
+                return None
+        except Exception as e:
+            logger.error(f"Error in generate_text with OpenAI: {e}")
             return None
-    except Exception as e:
-        logger.error(f"Error in generate_text: {e}")
-        return None
+    else:
+        logger.error(f"generate_text called with unsupported AI_PROVIDER: {AI_PROVIDER}")
+        return None # Fallback handled by caller
 
 def check_rate_limit_status():
     """Check and log the current Twitter/X API rate limit status for the authenticated user."""
@@ -451,7 +442,7 @@ __all__ = [
     'initialize_app_client',
     'get_ruck_sessions',
     'get_session_details',
-    'initialize_xai_client',
+    'initialize_ai_client',
     'generate_text',
-    'check_rate_limit_status'  # Add this to exports
+    'check_rate_limit_status'
 ] 

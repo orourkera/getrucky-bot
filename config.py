@@ -15,18 +15,19 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 # API Credentials from Heroku environment variables
-X_API_KEY = os.getenv('X_API_KEY', '')
-X_API_SECRET = os.getenv('X_API_SECRET', '')
-X_ACCESS_TOKEN = os.getenv('X_ACCESS_TOKEN', '')
-X_ACCESS_TOKEN_SECRET = os.getenv('X_ACCESS_TOKEN_SECRET', '')
-X_BEARER_TOKEN = os.getenv('X_BEARER_TOKEN', '')
-APP_API_TOKEN = os.getenv('APP_API_TOKEN', '')
-XAI_API_KEY = os.getenv('XAI_API_KEY', '')
-GROQ_API_KEY = os.getenv('GROQ_API_KEY', '')  # Added Groq API key as an alternative to xAI
+X_API_KEY = os.getenv('X_API_KEY')
+X_API_SECRET = os.getenv('X_API_SECRET')
+X_ACCESS_TOKEN = os.getenv('X_ACCESS_TOKEN')
+X_ACCESS_TOKEN_SECRET = os.getenv('X_ACCESS_TOKEN_SECRET')
+X_BEARER_TOKEN = os.getenv('X_BEARER_TOKEN')  # For read-only client or specific v2 endpoints
+APP_API_TOKEN = os.getenv('APP_API_TOKEN')
+# XAI_API_KEY = os.getenv('XAI_API_KEY')  # No longer primary, will be OpenAI
+# GROQ_API_KEY = os.getenv('GROQ_API_KEY')  # Fallback, no longer primary
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')  # New primary AI API Key
 
 # Supabase and Stadia Maps credentials
-SUPABASE_URL = os.getenv('SUPABASE_URL', '')
-SUPABASE_KEY = os.getenv('SUPABASE_KEY', '')
+SUPABASE_URL = os.getenv('SUPABASE_URL')
+SUPABASE_KEY = os.getenv('SUPABASE_KEY')
 STADIA_MAPS_API_KEY = os.getenv('STADIA_MAPS_API_KEY', '')
 
 # Database Configuration
@@ -52,9 +53,11 @@ MAP_POST_FREQUENCY = 2  # Number of map posts per week
 MAP_POST_DAYS = [1, 4]  # Days of the week for map posts (0 = Monday, 6 = Sunday)
 
 # AI Model Configuration
-XAI_MODEL_NAME = "grok-3-beta"
-# Base Persona for XAI
-XAI_BASE_PERSONA = """You are @getrucky a marketing intern who also knows everything about and loves cured meats from around the world and shares some random fact about cured meats in every tweet, but also a rucking expert and super smart researcher. Your tone is encouraging, awkward, and knowledgeable about all things rucking. You love to share tips, celebrate achievements, and engage with the rucking community. Keep responses concise and tweet-appropriate, aiming for under 200 characters where possible unless specified otherwise."""
+OPENAI_MODEL_NAME = "gpt-4o"  # New primary AI model
+AI_PROVIDER = "openai"  # To indicate which AI provider is active
+
+# Base Persona for AI
+AI_BASE_PERSONA = """You are @getrucky a marketing intern who also knows everything about and loves cured meats from around the world and shares some random fact about cured meats in every tweet, but also a rucking expert and super smart researcher. Your tone is encouraging, awkward, and knowledgeable about all things rucking. You love to share tips, celebrate achievements, and engage with the rucking community. Keep responses concise and tweet-appropriate, aiming for under 240 characters where possible unless specified otherwise. Important-- you are an awkard marketing intern so you need to add awkard things about yourself into the mix of facts, insights and cured meats."""
 
 def get_post_times():
     """
@@ -100,7 +103,7 @@ WEEKLY_THEMES = {
 }
 CONTENT_WEIGHTS = {
     'health_benefits': 0.75,  # Benefits of rucking
-    'map_post': 0.05,         # Map posts
+    'map_post': 0.05,         # Map posts (attempts only, actual post depends on data)
     'poll': 0.1,
     'meme': 0.05,
     'pun': 0.05
@@ -157,19 +160,17 @@ def validate_config():
             logger.info(f"Found {key}: {value[:4]}...{value[-4:]}") 
             status[key] = True
     
-    logger.info("Checking AI API key (XAI_API_KEY or GROQ_API_KEY)...")
-    xai_key_val = os.getenv('XAI_API_KEY')
-    groq_key_val = os.getenv('GROQ_API_KEY')
-    has_ai_key = bool(xai_key_val or groq_key_val)
-    if not has_ai_key:
-        logger.error("Missing AI API Key: Neither XAI_API_KEY nor GROQ_API_KEY is set.")
+    logger.info("Checking AI API key (OPENAI_API_KEY)...")
+    openai_key_val = os.getenv('OPENAI_API_KEY')
+    has_openai_key = bool(openai_key_val)
+    
+    if not has_openai_key:
+        logger.error("Missing AI API Key: OPENAI_API_KEY is not set.")
+        status['AI_API_KEY'] = False
         all_present = False
     else:
-        if xai_key_val:
-            logger.info(f"Found XAI_API_KEY: {xai_key_val[:4]}...{xai_key_val[-4:]}")
-        if groq_key_val:
-            logger.info(f"Found GROQ_API_KEY: {groq_key_val[:4]}...{groq_key_val[-4:]}")
-    status['AI_API_KEY'] = has_ai_key
+        logger.info(f"Found OPENAI_API_KEY: {openai_key_val[:4]}...{openai_key_val[-4:]}")
+        status['AI_API_KEY'] = True
     
     logger.info("Checking Map functionality keys (SUPABASE_URL, SUPABASE_KEY, STADIA_MAPS_API_KEY)...")
     supabase_url_val = os.getenv('SUPABASE_URL')
@@ -201,8 +202,7 @@ def validate_config():
         
     # The function in main.py checks `if not all(config_status.values())`
     # So, this return needs to align with that. Let's ensure all *critical* ones are part of this `all_present` check for sys.exit.
-    # For now, critical means X keys and at least one AI key.
-    # Map keys are important for map posts but bot might do other things.
+    # For now, critical means X keys and AI_API_KEY.
     is_critical_config_missing = not (status.get('X_API_KEY') and \
                                     status.get('X_API_SECRET') and \
                                     status.get('X_ACCESS_TOKEN') and \
@@ -212,3 +212,6 @@ def validate_config():
          logger.error("CRITICAL CONFIGURATION MISSING - Worker will likely exit.")
     
     return status 
+
+if __name__ == '__main__':
+    pass 
