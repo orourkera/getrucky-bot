@@ -217,6 +217,17 @@ def get_engagement_actions(start_date):
         conn = sqlite3.connect(ANALYTICS_DB)
         cursor = conn.cursor()
         
+        # Ensure engagement table exists (added for resilience)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS engagement (
+                tweet_id TEXT,
+                action TEXT,
+                timestamp TIMESTAMP,
+                PRIMARY KEY (tweet_id, action, timestamp) -- Added to prevent duplicates if re-run
+            )
+        """)
+        conn.commit() # Commit table creation
+        
         cursor.execute("""
             SELECT tweet_id, action, timestamp
             FROM engagement
@@ -243,6 +254,17 @@ def store_engagement_action(tweet_id, action):
     try:
         conn = sqlite3.connect(ANALYTICS_DB)
         cursor = conn.cursor()
+        
+        # Ensure engagement table exists (added for resilience)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS engagement (
+                tweet_id TEXT,
+                action TEXT,
+                timestamp TIMESTAMP,
+                PRIMARY KEY (tweet_id, action, timestamp) -- Added to prevent duplicates if re-run
+            )
+        """)
+        # No need to commit SELECT for table creation check, but will commit after insert
         
         cursor.execute("""
             INSERT INTO engagement (tweet_id, action, timestamp)
