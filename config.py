@@ -45,7 +45,7 @@ PAPERTRAIL_API_TOKEN = os.getenv('PAPERTRAIL_API_TOKEN', '')
 
 # Bot Configuration Constants
 POST_FREQUENCY = range(4, 5)  # Ensures exactly 4 posts per day (1 map/session + 3 regular)
-SEARCH_TERMS = ["ruck", "rucking", "#rucking", "#rucklife"]
+SEARCH_TERMS = ["ruck", "rucking", "rucklife", "hiking", "hike", "VO2", "ozempic"]
 MAX_REPLIES = 50  # Max replies per hour
 
 # Map Post Configuration
