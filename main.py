@@ -59,32 +59,21 @@ def main():
     logger.info("Validating configuration")
     config_status = validate_config()
     
-    # Determine if critical configuration is missing
-    # Logic for this is now within validate_config, let's use a simpler check here
-    # based on the expectation that validate_config correctly identifies critical issues.
-    # We can refine this by having validate_config return a more explicit critical_failure flag.
-    
-    # For now, let's assume validate_config correctly logs and we check its overall status
-    # If any key (even optional ones for full functionality) is reported as missing by current validate_config structure, it will fail all().
-    # Let's make the exit condition in main.py depend on the *critical* assessment inside validate_config.
-
-    # A better approach: validate_config could return two statuses or a more structured object.
-    # Quick fix: Re-evaluate critical nature here based on what we know is essential for core operation.
     essential_keys_present = all([
         config_status.get('X_API_KEY', False),
         config_status.get('X_API_SECRET', False),
         config_status.get('X_ACCESS_TOKEN', False),
         config_status.get('X_ACCESS_TOKEN_SECRET', False),
-        config_status.get('AI_API_KEY', False) # This checks if at least one AI key (XAI or GROQ) is present
+        config_status.get('AI_API_KEY', False) 
     ])
 
     if not essential_keys_present:
         logger.error("CRITICAL environment variables missing. Worker process will exit. Check logs from validate_config for details.")
         sys.exit(1)
-    elif not all(config_status.values()): # Some non-critical (e.g., map-related) keys might be missing
+    elif not all(config_status.values()): 
         logger.warning("Some non-critical environment variables might be missing (e.g., for map functionality). Bot will attempt to continue. Check logs from validate_config.")
     else:
-    logger.info("Configuration validated successfully")
+        logger.info("Configuration validated successfully")
     
     # Initialize databases
     logger.info("Initializing databases")
@@ -113,56 +102,48 @@ def main():
     logger.info(f"Selected {len(post_times)} post times for today")
     scheduler.schedule_posts(scheduler_instance, x_client, None, api_client.initialize_ai_client())
     
-    # Schedule engagement tasks with rate limiting safeguards
-    # Run engagement 3 times a day (every 8 hours) to avoid API rate limits
-    # First run at 3 hours after startup to prioritize posting
     logger.info("Scheduling engagement tasks with rate limiting")
     
-    # Create a wrapper function that implements additional rate limit safeguards
     def safe_engagement():
         try:
-            # First check if we've hit any rate limits recently
             rate_limits = api_client.check_rate_limit_status()
             
             if rate_limits:
-                # Look for endpoints close to limit
                 safe_to_proceed = True
                 for category, endpoints in rate_limits.items():
                     for endpoint, limits in endpoints.items():
-                        if limits.get('remaining', 100) < 20:  # Maintain a buffer of 20 calls
+                        if limits.get('remaining', 100) < 20:
                             logger.warning(f"Rate limit buffer reached for {endpoint}. Skipping engagement.")
                             safe_to_proceed = False
                             break
+                    if not safe_to_proceed: # break outer loop if already decided not to proceed
+                        break 
                 
                 if not safe_to_proceed:
                     logger.info("Engagement deferred due to rate limit concerns.")
                     return
             
-            # If safe, proceed with engagement
             ai_headers = api_client.initialize_ai_client()
             result = scheduler.engage_with_posts(readonly_client or x_client, ai_headers)
             logger.info(f"Engagement completed: {result}")
         except Exception as e:
             logger.error(f"Error in safe engagement: {e}")
     
-    # Schedule engagement every 8 hours
     scheduler_instance.add_job(
         safe_engagement,
         IntervalTrigger(hours=8),
         id='engagement_task_8h'
     )
     
-    # Also schedule daily backup at 2 AM UTC
-        scheduler_instance.add_job(
+    scheduler_instance.add_job(
         backup.backup_db,
         CronTrigger(hour=2, minute=0),
         id='database_backup'
-        )
+    )
     
     scheduler_instance.start()
     logger.info("Scheduler started successfully (full mode with engagement)")
     
-    # Keep the process alive
     while True:
         try:
             time.sleep(60)
