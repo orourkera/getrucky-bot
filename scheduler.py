@@ -230,7 +230,7 @@ def post_session_content(x_client, app_client, ai_headers):
 
 def engage_with_posts(x_client, ai_headers):
     """Search for and engage with relevant tweets by liking, retweeting, and commenting."""
-    from random import choice, random
+    import random  # Import random correctly
     from config import SEARCH_TERMS, RETWEET_WHITELIST, MIN_FOLLOWER_COUNT
     from analytics import get_engagement_actions, store_engagement_action
     import datetime
@@ -262,7 +262,7 @@ def engage_with_posts(x_client, ai_headers):
         tweet_id = tweet.id
         
         # 1. Like tweets (90% probability)
-        if random() < 0.9 and tweet_id not in engaged_ids:
+        if random.random() < 0.9 and tweet_id not in engaged_ids:
             success = api_client.like_tweet(x_client, tweet_id)
             if success:
                 liked += 1
@@ -292,7 +292,7 @@ def engage_with_posts(x_client, ai_headers):
             logger.error(f"Error checking author for retweet eligibility: {e}")
         
         # 3. Comment on tweets (limit to 10 per week)
-        if len(weekly_comments) < 10 and tweet_id not in engaged_ids and random() < 0.3:
+        if len(weekly_comments) < 10 and tweet_id not in engaged_ids and random.random() < 0.3:
             try:
                 # Construct a prompt for the AI to generate a relevant comment
                 prompt = f"Write a short, engaging reply to this tweet about {query}. Be positive, friendly, and authentic. Keep it under 200 characters."
