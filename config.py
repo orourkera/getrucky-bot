@@ -109,8 +109,8 @@ CONTENT_WEIGHTS = {
     'pun': 0.05
 }
 LIKE_PROBABILITY = 0.9  # 90% chance to like 'ruck' posts
-RETWEET_ACCOUNTS = ["GaryBrecka", "PeterAttiaMD"]
-MIN_FOLLOWERS = 500  # Minimum followers for retweet eligibility
+RETWEET_WHITELIST = ["GaryBrecka", "PeterAttiaMD"]
+MIN_FOLLOWER_COUNT = 500  # Minimum followers for retweet eligibility
 
 # Content Moderation Blocklist
 BLOCKLIST = ["inappropriate_word1", "inappropriate_word2"]  # Add more as needed
