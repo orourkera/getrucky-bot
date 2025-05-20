@@ -6,7 +6,7 @@ import sqlite3
 import os
 from datetime import datetime
 import api_client
-from config import CONTENT_WEIGHTS, WEEKLY_THEMES, POST_FREQUENCY, AI_PROVIDER, OPENAI_API_KEY, GROQ_API_KEY
+from config import CONTENT_WEIGHTS, WEEKLY_THEMES, POST_FREQUENCY, AI_PROVIDER, OPENAI_API_KEY
 import config
 
 logger = logging.getLogger(__name__)
@@ -316,13 +316,9 @@ def generate_map_post_text(session_data):
     # AI_PROVIDER from config.py should guide this more cleanly
     if AI_PROVIDER == "openai" and OPENAI_API_KEY:
         effective_api_source = "OpenAI"
-    elif AI_PROVIDER == "groq" and GROQ_API_KEY: # Assuming we might add Groq back as a specific provider
-        effective_api_source = "Groq"
-    # elif XAI_API_KEY: # Original xAI, now deprecated in favor of OpenAI/Groq distinction
-        # effective_api_source = "xAI"
     else:
         effective_api_source = None 
-        logger.warning(f"No suitable AI API key found (checked OpenAI, Groq). Map post text generation will use fallback.")
+        logger.warning(f"No suitable AI API key found (checked OpenAI). Map post text generation will use fallback.")
 
     if effective_api_source:
         try:
