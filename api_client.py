@@ -413,8 +413,8 @@ def check_rate_limit_status():
             X_API_SECRET,
             X_ACCESS_TOKEN,
             X_ACCESS_TOKEN_SECRET
-    )
-    url = "https://api.twitter.com/1.1/application/rate_limit_status.json"
+        )
+        url = "https://api.twitter.com/1.1/application/rate_limit_status.json"
         response = requests.get(url, auth=auth)
         response.raise_for_status()
         data = response.json()
