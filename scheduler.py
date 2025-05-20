@@ -229,64 +229,85 @@ def post_session_content(x_client, app_client, ai_headers):
         return post_regular_content(x_client, ai_headers)
 
 def engage_with_posts(x_client, ai_headers):
-    """Engage with posts by liking, retweeting, and commenting."""
-    from config import SEARCH_TERMS, LIKE_PROBABILITY, RETWEET_ACCOUNTS, MIN_FOLLOWERS
-    from analytics import store_engagement_action, get_engagement_actions
-    from datetime import datetime, timedelta
+    """Search for and engage with relevant tweets by liking, retweeting, and commenting."""
+    from random import choice, random
+    from config import SEARCH_TERMS, RETWEET_WHITELIST, MIN_FOLLOWER_COUNT
+    from analytics import get_engagement_actions, store_engagement_action
+    import datetime
+
+    # Randomly select a search term
+    query = random.choice(SEARCH_TERMS)
+    
+    # Fetch tweets with at least 1 like (temporarily reduced for testing)
+    tweets = api_client.search_tweets(x_client, query, min_likes=1)
+    
+    # Track engagement actions
+    liked = 0
+    retweeted = 0
+    commented = 0
+    
+    # Get weekly comment count for rate limiting
+    start_of_week = datetime.datetime.now().date() - datetime.timedelta(days=datetime.datetime.now().weekday())
     try:
-        query = random.choice(SEARCH_TERMS)
-        tweets = api_client.search_tweets(x_client, query)
-        engagement_count = {'liked': 0, 'retweeted': 0, 'commented': 0}
+        weekly_comments = get_engagement_actions(start_of_week, 'comment')
+        logger.info(f"Already made {len(weekly_comments)} comments this week")
+    except Exception as e:
+        logger.error(f"Error retrieving engagement actions: {e}")
+        weekly_comments = []
+    
+    # Only engage with each tweet once per type of engagement
+    engaged_ids = set()
+    
+    for tweet in tweets:
+        tweet_id = tweet.id
         
-        # Check weekly comment limit (aim for ~10 per week)
-        start_of_week = (datetime.utcnow() - timedelta(days=datetime.utcnow().weekday())).isoformat()
-        engagement_actions = get_engagement_actions(start_of_week)
-        weekly_comments = sum(1 for action in engagement_actions if action['action'] == 'comment')
-        comment_limit_reached = weekly_comments >= 10
+        # 1. Like tweets (90% probability)
+        if random() < 0.9 and tweet_id not in engaged_ids:
+            success = api_client.like_tweet(x_client, tweet_id)
+            if success:
+                liked += 1
+                store_engagement_action('like', tweet_id)
+                engaged_ids.add(tweet_id)
         
-        for tweet in tweets:
-            tweet_id = tweet.id
-            username = tweet.user.screen_name
+        # 2. Retweet tweets from whitelisted accounts or with enough followers
+        try:
+            author_id = tweet.author_id
+            author_username = x_client.get_user(id=author_id).data.username
             
-            # Like with 90% probability
-            if random.random() < LIKE_PROBABILITY:
-                if api_client.like_tweet(x_client, tweet_id):
-                    engagement_count['liked'] += 1
-                    store_engagement_action(tweet_id, 'like')
+            # Check if user is in whitelist or has enough followers
+            in_whitelist = author_username.lower() in [name.lower() for name in RETWEET_WHITELIST]
             
-            # Check retweet eligibility
-            followers = api_client.get_user_followers(x_client, username)
-            if username in RETWEET_ACCOUNTS or followers > MIN_FOLLOWERS:
-                if api_client.retweet(x_client, tweet_id):
-                    engagement_count['retweeted'] += 1
-                    store_engagement_action(tweet_id, 'retweet')
+            has_followers = False
+            if not in_whitelist:
+                follower_count = api_client.get_user_followers(x_client, author_username)
+                has_followers = follower_count >= MIN_FOLLOWER_COUNT
             
-            # Cross-posting comment (limit to 10 per week using database counter)
-            if not comment_limit_reached:
-                # This is now just the task-specific part of the prompt
-                user_prompt_for_comment = "User's rucking-related post detected. Generate a brief, supportive comment promoting @getrucky. Keep it under 150 characters. Include a relevant emoji if appropriate." 
-                
-                # Check cache with the user_prompt_for_comment
-                comment_text = content_generator.get_cached_response(user_prompt_for_comment)
-                if not comment_text:
-                    # api_client.generate_text will add the base persona
-                    comment_text = api_client.generate_text(ai_headers, user_prompt_for_comment)
-                    content_generator.cache_response(user_prompt_for_comment, comment_text)
-                
-                # Final check for length before posting
-                if comment_text and len(comment_text) > 280: # Twitter's hard limit for replies
-                    comment_text = comment_text[:277] + "..."
+            if (in_whitelist or has_followers) and tweet_id not in engaged_ids:
+                success = api_client.retweet(x_client, tweet_id)
+                if success:
+                    retweeted += 1
+                    store_engagement_action('retweet', tweet_id)
+                    engaged_ids.add(tweet_id)
+        except Exception as e:
+            logger.error(f"Error checking author for retweet eligibility: {e}")
+        
+        # 3. Comment on tweets (limit to 10 per week)
+        if len(weekly_comments) < 10 and tweet_id not in engaged_ids and random() < 0.3:
+            try:
+                # Construct a prompt for the AI to generate a relevant comment
+                prompt = f"Write a short, engaging reply to this tweet about {query}. Be positive, friendly, and authentic. Keep it under 200 characters."
+                comment_text = api_client.generate_text(ai_headers, prompt)
                 
                 if comment_text:
-                    if api_client.reply_to_tweet(x_client, tweet_id, comment_text):
-                        engagement_count['commented'] += 1
-                        store_engagement_action(tweet_id, 'comment')
-                        weekly_comments += 1
-                        if weekly_comments >= 10:
-                            comment_limit_reached = True
-        
-        logger.info(f"Engagement results: Liked {engagement_count['liked']}, Retweeted {engagement_count['retweeted']}, Commented {engagement_count['commented']}")
-        return engagement_count
-    except Exception as e:
-        logger.error(f"Error during engagement with posts: {e}")
-        return {'liked': 0, 'retweeted': 0, 'commented': 0} 
+                    success = api_client.reply_to_tweet(x_client, tweet_id, comment_text)
+                    if success:
+                        commented += 1
+                        store_engagement_action('comment', tweet_id)
+                        engaged_ids.add(tweet_id)
+                        # Increment weekly comments counter
+                        weekly_comments.append(tweet_id)
+            except Exception as e:
+                logger.error(f"Error commenting on tweet {tweet_id}: {e}")
+    
+    logger.info(f"Engagement results: Liked {liked}, Retweeted {retweeted}, Commented {commented}")
+    return {"liked": liked, "retweeted": retweeted, "commented": commented} 
