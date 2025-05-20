@@ -108,28 +108,28 @@ def check_database_health():
                     
             # Now check if we can access the database (it should exist now)
             if os.path.exists(db_path):
-                conn = sqlite3.connect(db_path)
-                cursor = conn.cursor()
-                
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            
                 # Set status to healthy by default if we can connect
                 health_status[db_name] = {'status': 'healthy'}
                 
                 # Additional checks for each database
                 try:
-                    if db_name == 'interaction_log':
+            if db_name == 'interaction_log':
                         cursor.execute("SELECT COUNT(*) FROM logs")
                         count = cursor.fetchone()[0]
                         health_status[db_name]['total_records'] = count
-                    elif db_name == 'analytics':
+            elif db_name == 'analytics':
                         cursor.execute("SELECT COUNT(*) FROM metrics")
                         count = cursor.fetchone()[0]
                         health_status[db_name]['total_metrics'] = count
-                    elif db_name == 'model_cache':
+            elif db_name == 'model_cache':
                         cursor.execute("SELECT COUNT(*) FROM cache")
                         count = cursor.fetchone()[0]
                         health_status[db_name]['cached_responses'] = count
-                    elif db_name == 'pun_library':
-                        cursor.execute("SELECT COUNT(*) FROM templates")
+            elif db_name == 'pun_library':
+                    cursor.execute("SELECT COUNT(*) FROM templates")
                         count = cursor.fetchone()[0]
                         health_status[db_name]['total_templates'] = count
                 except sqlite3.OperationalError as e:
@@ -138,8 +138,8 @@ def check_database_health():
                         'status': 'initializing',
                         'message': f'Database exists but tables not ready: {str(e)}'
                     }
-                
-                conn.close()
+            
+            conn.close()
             else:
                 # After all our attempts, the database still doesn't exist
                 health_status[db_name] = {

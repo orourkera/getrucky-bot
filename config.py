@@ -45,7 +45,7 @@ PAPERTRAIL_API_TOKEN = os.getenv('PAPERTRAIL_API_TOKEN', '')
 
 # Bot Configuration Constants
 POST_FREQUENCY = range(4, 5)  # Ensures exactly 4 posts per day (1 map/session + 3 regular)
-SEARCH_TERMS = ["ruck", "rucking", "rucklife", "hiking", "hike", "VO2", "ozempic"]
+SEARCH_TERMS = ["ruck", "rucking", "hiking", "hike", "VO2", "ozempic", "goruck"]
 MAX_REPLIES = 50  # Max replies per hour
 
 # Map Post Configuration
@@ -81,7 +81,7 @@ def get_post_times():
         minute = int((hour_offset - hour) * 60)  # Convert fractional hour to minutes
         if hour >= end_hour:  # Ensure we don't go past 9 PM ET
             hour = end_hour - 1
-            minute = random.randint(0, 59)
+        minute = random.randint(0, 59)
         # Create ET datetime
         et_dt = datetime.combine(today, time(hour, minute), tzinfo=TZ)
         # Convert to UTC

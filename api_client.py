@@ -354,10 +354,10 @@ def initialize_ai_client():
                 'Content-Type': 'application/json'
             }
             logger.info("OpenAI API client initialized")
-            return headers
-        except Exception as e:
+        return headers
+    except Exception as e:
             logger.error(f"Failed to initialize OpenAI API client: {e}")
-            raise
+        raise
     else:
         logger.error(f"Unsupported AI_PROVIDER: {AI_PROVIDER}")
         raise ValueError(f"Unsupported AI_PROVIDER: {AI_PROVIDER}")
@@ -371,7 +371,7 @@ def generate_text(ai_headers, user_prompt):
             url = "https://api.openai.com/v1/chat/completions"
             model_name = OPENAI_MODEL_NAME
 
-            payload = {
+        payload = {
                 "model": model_name,
                 "messages": [
                     {"role": "system", "content": AI_BASE_PERSONA},
@@ -413,8 +413,8 @@ def check_rate_limit_status():
             X_API_SECRET,
             X_ACCESS_TOKEN,
             X_ACCESS_TOKEN_SECRET
-        )
-        url = "https://api.twitter.com/1.1/application/rate_limit_status.json"
+    )
+    url = "https://api.twitter.com/1.1/application/rate_limit_status.json"
         response = requests.get(url, auth=auth)
         response.raise_for_status()
         data = response.json()

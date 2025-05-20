@@ -84,7 +84,7 @@ def main():
     elif not all(config_status.values()): # Some non-critical (e.g., map-related) keys might be missing
         logger.warning("Some non-critical environment variables might be missing (e.g., for map functionality). Bot will attempt to continue. Check logs from validate_config.")
     else:
-        logger.info("Configuration validated successfully")
+    logger.info("Configuration validated successfully")
     
     # Initialize databases
     logger.info("Initializing databases")
@@ -153,11 +153,11 @@ def main():
     )
     
     # Also schedule daily backup at 2 AM UTC
-    scheduler_instance.add_job(
+        scheduler_instance.add_job(
         backup.backup_db,
         CronTrigger(hour=2, minute=0),
         id='database_backup'
-    )
+        )
     
     scheduler_instance.start()
     logger.info("Scheduler started successfully (full mode with engagement)")

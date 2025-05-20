@@ -163,7 +163,7 @@ Configure Papertrail alerts for:
 5. Create a Pull Request
 
 ## License
-MIT License - see LICENSE file for details
+MIT License - see LICENSE file for details 
 
 ## Map Post Feature
 

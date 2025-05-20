@@ -31,9 +31,9 @@ def select_content_type():
         rand = random.random()
         cumulative_weight = 0
         for content_type, weight in CONTENT_WEIGHTS.items():
-            cumulative_weight += weight
-            if rand <= cumulative_weight:
-                return content_type, None
+                cumulative_weight += weight
+                if rand <= cumulative_weight:
+                    return content_type, None
         return 'pun', None  # Default fallback
 
 def generate_post(ai_headers, content_type, theme=None):
@@ -60,7 +60,7 @@ def generate_post(ai_headers, content_type, theme=None):
     if cached_response and len(cached_response) > 50:
         logger.info(f"Using cached response for {content_type} post")
         return cached_response
-
+    
     try:
         text = api_client.generate_text(ai_headers, prompt)
         if text and len(text) > 50:
@@ -70,7 +70,7 @@ def generate_post(ai_headers, content_type, theme=None):
     except Exception as e:
         logger.error(f"Failed to generate {content_type} post with {AI_PROVIDER} API: {e}")
         # Fall through to template-based backup
-
+    
     # Fallback to template from pun_library.db
     template = get_random_template('post', content_type)
     logger.warning(f"Using template fallback for {content_type} post due to API failure")
@@ -96,10 +96,10 @@ def generate_session_post(ai_headers, session_data):
     achievement_text = " and achieved " + ", ".join(achievements) if achievements else ""
     
     prompt = f"""Create a brief, enthusiastic shout-out post for this ruck session:
-User: {user}
-Distance: {distance} miles
-Duration: {time}
-Achievements: {achievement_text if achievement_text else 'None'}
+    User: {user}
+    Distance: {distance} miles
+    Duration: {time}
+    Achievements: {achievement_text if achievement_text else 'None'}
 
 Keep the tone celebratory. Include 1-2 relevant emojis. Use a strong call to action or an inspiring message. 
 End with ONE hashtag. IMPORTANT: Response strictly under 180 characters."""
@@ -193,7 +193,7 @@ def get_prompt_for_content_type(content_type, theme=None):
     """Return the task-specific user prompt for the content type."""
     current_month = datetime.utcnow().month
     season = get_season(current_month)
-
+    
     # These prompts are now just the *user* part of the request
     # The base persona is handled by api_client.generate_text
     base_user_prompts = {
@@ -294,7 +294,7 @@ def cache_response(prompt, response):
         return True
     except Exception as e:
         logger.error(f"Error caching response: {e}")
-        return False
+        return False 
 
 def generate_map_post_text(session_data):
     """Generate text for a map post based on session data."""

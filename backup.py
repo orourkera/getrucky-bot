@@ -126,90 +126,90 @@ def initialize_databases():
         
         # Pun Library DB
         try:
-            conn = sqlite3.connect(DB_FILES['pun_library'])
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS templates (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    text TEXT NOT NULL,
-                    type TEXT NOT NULL,
-                    category TEXT NOT NULL
-                )
-            """)
-            conn.commit()
-            conn.close()
-            logger.info("Initialized pun_library.db")
+        conn = sqlite3.connect(DB_FILES['pun_library'])
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS templates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                text TEXT NOT NULL,
+                type TEXT NOT NULL,
+                category TEXT NOT NULL
+            )
+        """)
+        conn.commit()
+        conn.close()
+        logger.info("Initialized pun_library.db")
         except Exception as e:
             logger.error(f"Error initializing pun_library.db: {e}")
             success = False
         
         # Interaction Log DB
         try:
-            conn = sqlite3.connect(DB_FILES['interaction_log'])
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS logs (
-                    tweet_id TEXT PRIMARY KEY,
-                    reply_text TEXT,
-                    sentiment TEXT,
-                    content_type TEXT,
-                    timestamp TIMESTAMP,
+        conn = sqlite3.connect(DB_FILES['interaction_log'])
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS logs (
+                tweet_id TEXT PRIMARY KEY,
+                reply_text TEXT,
+                sentiment TEXT,
+                content_type TEXT,
+                timestamp TIMESTAMP,
                     mention_timestamp TEXT,
                     reply_to_tweet_id TEXT,
                     user_handle TEXT
-                )
-            """)
-            conn.commit()
-            conn.close()
-            logger.info("Initialized interaction_log.db")
+            )
+        """)
+        conn.commit()
+        conn.close()
+        logger.info("Initialized interaction_log.db")
         except Exception as e:
             logger.error(f"Error initializing interaction_log.db: {e}")
             success = False
         
         # Analytics DB
         try:
-            conn = sqlite3.connect(DB_FILES['analytics'])
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS metrics (
-                    post_id TEXT PRIMARY KEY,
-                    likes INTEGER,
-                    retweets INTEGER,
-                    replies INTEGER,
-                    timestamp TIMESTAMP
-                )
-            """)
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS engagement (
-                    tweet_id TEXT,
-                    action TEXT,
-                    timestamp TIMESTAMP
-                )
-            """)
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS flags (
-                    text TEXT,
-                    reason TEXT,
-                    timestamp TIMESTAMP
-                )
-            """)
-            conn.commit()
-            conn.close()
-            logger.info("Initialized analytics.db")
+        conn = sqlite3.connect(DB_FILES['analytics'])
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS metrics (
+                post_id TEXT PRIMARY KEY,
+                likes INTEGER,
+                retweets INTEGER,
+                replies INTEGER,
+                timestamp TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS engagement (
+                tweet_id TEXT,
+                action TEXT,
+                timestamp TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS flags (
+                text TEXT,
+                reason TEXT,
+                timestamp TIMESTAMP
+            )
+        """)
+        conn.commit()
+        conn.close()
+        logger.info("Initialized analytics.db")
         except Exception as e:
             logger.error(f"Error initializing analytics.db: {e}")
             success = False
         
         # Model Cache DB
         try:
-            conn = sqlite3.connect(DB_FILES['model_cache'])
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS cache (
-                    prompt TEXT PRIMARY KEY,
-                    response TEXT,
-                    timestamp TIMESTAMP
-                )
-            """)
-            conn.commit()
-            conn.close()
-            logger.info("Initialized model_cache.db")
+        conn = sqlite3.connect(DB_FILES['model_cache'])
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS cache (
+                prompt TEXT PRIMARY KEY,
+                response TEXT,
+                timestamp TIMESTAMP
+            )
+        """)
+        conn.commit()
+        conn.close()
+        logger.info("Initialized model_cache.db")
         except Exception as e:
             logger.error(f"Error initializing model_cache.db: {e}")
             success = False
